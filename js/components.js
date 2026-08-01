@@ -412,14 +412,20 @@
   }
 
   /**
-   * True quarter-circle polyline (no SVG arc sweep ambiguity).
-   * hinge → closed radius → arc samples → open free end → hinge (open leaf).
+   * Legacy combined path. Prefer doorArcPath + doorLeafPath + doorSectorPath.
    */
   function doorSymbolPath(obj) {
+    return doorArcPath(obj);
+  }
+
+  /**
+   * Light-filled swing sector (Maket-style): hinge → closed free end → arc → open free end → hinge.
+   */
+  function doorSectorPath(obj) {
     const g = doorGeometry(obj);
     const h = toLocal(g, { x: g.hx, y: g.hy });
     const c = toLocal(g, g.closedEnd);
-    const steps = 24;
+    const steps = 32;
     let d = "M " + h.x + " " + h.y + " L " + c.x + " " + c.y;
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
@@ -432,9 +438,12 @@
     return d;
   }
 
+  /**
+   * Dashed quarter-circle swing: free end of closed leaf → free end of open leaf.
+   */
   function doorArcPath(obj) {
     const g = doorGeometry(obj);
-    const steps = 24;
+    const steps = 32;
     const c = toLocal(g, g.closedEnd);
     let d = "M " + c.x + " " + c.y;
     for (let i = 1; i <= steps; i++) {
@@ -447,6 +456,9 @@
     return d;
   }
 
+  /**
+   * Solid open leaf at 90°: hinge → open free end.
+   */
   function doorLeafPath(obj) {
     const g = doorGeometry(obj);
     const h = toLocal(g, { x: g.hx, y: g.hy });
@@ -855,6 +867,7 @@
     doorGeometry,
     doorSweepPath,
     doorSymbolPath,
+    doorSectorPath,
     doorArcPath,
     doorLeafPath,
     doorClosedLeafPath,

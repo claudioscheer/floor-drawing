@@ -11,47 +11,50 @@
 }
 
 :root {
-  /* Solid product chrome + warm plan-drawing canvas */
-  --bg: #e9eaee;
+  /* Maket-inspired: soft chrome + crisp plan drawing */
+  --bg: #eceef2;
   --surface: #ffffff;
-  --surface-2: #f4f5f7;
-  --surface-3: #e8eaef;
-  --border: #c8ccd4;
-  --border-soft: #e2e4ea;
-  --border-strong: #9aa1ad;
+  --surface-2: #f5f6f8;
+  --surface-3: #e9ebf0;
+  --border: #d0d4dc;
+  --border-soft: #e6e8ee;
+  --border-strong: #a0a7b4;
   --text: #1a1d24;
   --text-muted: #5c6370;
   --text-faint: #8b929e;
-  --accent: #0b6bcb;
-  --accent-hover: #0958a8;
-  --accent-soft: #e7f1fb;
-  --accent-border: #b7d4f0;
+  --accent: #2f6fed;
+  --accent-hover: #1d5ad6;
+  --accent-soft: #e8f0fe;
+  --accent-border: #b6ccfa;
   --danger: #c50f1f;
   --danger-soft: #fde7e9;
   --danger-border: #f1aeb5;
   --snap: #0f7a3a;
   --snap-soft: #e0f5e8;
-  --dim-line: #3d4450;
-  --dim-badge-bg: #1a1d24;
-  --dim-badge-fg: #f5e6a0;
+  /* Dimension annotations (Maket blue) */
+  --dim-line: #2f6fed;
+  --dim-badge-bg: transparent;
+  --dim-badge-fg: #2f6fed;
   /* Plan object palette */
-  --plan-paper: #f2efe8;
-  --plan-floor: #faf8f4;
-  --plan-floor-edge: #2c3340;
-  --plan-wall: #3a3f4b;
-  --plan-wall-edge: #1e222b;
-  --plan-terrain: #d8e6c8;
-  --plan-terrain-edge: #5a7a48;
-  --plan-window: #5b9fd4;
-  --plan-window-jamb: #2a3544;
-  --plan-door: #1e222b;
-  --plan-door-fill: #fffdf8;
+  --plan-paper: #f7f6f3;
+  --plan-floor: #fbfaf7;
+  --plan-floor-edge: #1a1d24;
+  --plan-wall: #1a1d24;
+  --plan-wall-edge: #0d0f12;
+  --plan-terrain: #e8efe0;
+  --plan-terrain-edge: #6a8a58;
+  --plan-window: #93c5fd;
+  --plan-window-jamb: #1a1d24;
+  --plan-door: #1a1d24;
+  --plan-door-fill: #ffffff;
+  --plan-select-fill: rgba(59, 130, 246, 0.16);
+  --plan-select-stroke: #2f6fed;
   --radius: 3px;
   --radius-sm: 2px;
   --panel-w: 248px;
   --header-h: 44px;
   --font: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --mono: "Cascadia Mono", "Consolas", "SF Mono", monospace;
+  --mono: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
 }
 
 html,
@@ -956,15 +959,9 @@ button {
   cursor: default;
   touch-action: none;
   background: var(--plan-paper);
-  /* Infinite feel: subtle dots + meter grid */
-  background-image:
-    radial-gradient(circle, rgba(40, 48, 60, 0.16) 0.65px, transparent 1px),
-    linear-gradient(rgba(40, 48, 60, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 48, 60, 0.055) 1px, transparent 1px);
-  background-size:
-    10px 10px,
-    100px 100px,
-    100px 100px;
+  /* Soft dot grid (Maket-like) */
+  background-image: radial-gradient(circle, rgba(80, 88, 100, 0.22) 0.7px, transparent 1px);
+  background-size: 14px 14px;
   background-position: 0 0;
 }
 
@@ -1393,12 +1390,9 @@ button {
 }
 
 .fp-object--wall {
-  background: linear-gradient(180deg, #4a5060 0%, var(--plan-wall) 45%, #323743 100%);
+  background: var(--plan-wall);
   border: none;
-  box-shadow:
-    inset 0 0 0 1px var(--plan-wall-edge),
-    0 0 0 1px rgba(0, 0, 0, 0.2),
-    0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
   z-index: 5;
 }
 
@@ -1407,35 +1401,26 @@ button {
 }
 
 .fp-object--window {
-  /* Default (horizontal opening): jambs top/bottom, glass mid */
-  background:
-    linear-gradient(
-      to bottom,
-      var(--plan-window-jamb) 0 14%,
-      #eef6fc 14% 30%,
-      var(--plan-window) 30% 70%,
-      #eef6fc 70% 86%,
-      var(--plan-window-jamb) 86% 100%
-    );
-  border: 1px solid var(--plan-window-jamb);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-    0 0 0 1px rgba(30, 50, 70, 0.22);
+  /* Maket-style glass: soft blue fill, dark jamb frame */
+  background: linear-gradient(
+    180deg,
+    #dbeafe 0%,
+    var(--plan-window) 40%,
+    #bfdbfe 100%
+  );
+  border: 1.5px solid var(--plan-window-jamb);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
   z-index: 8;
   overflow: visible;
 }
 
-/* Vertical opening: jambs left/right */
 .fp-object--window.is-vertical {
-  background:
-    linear-gradient(
-      to right,
-      var(--plan-window-jamb) 0 14%,
-      #eef6fc 14% 30%,
-      var(--plan-window) 30% 70%,
-      #eef6fc 70% 86%,
-      var(--plan-window-jamb) 86% 100%
-    );
+  background: linear-gradient(
+    90deg,
+    #dbeafe 0%,
+    var(--plan-window) 40%,
+    #bfdbfe 100%
+  );
 }
 
 .fp-object--window .fp-object-label {
@@ -1447,27 +1432,17 @@ button {
 }
 
 .fp-object--door {
-  /* Opening gap through wall mass */
-  background: var(--plan-door-fill);
-  border: none;
+  /* Solid door leaf slab sitting in the wall opening (closed) */
+  background: #ffffff;
+  border: 1.5px solid #111;
   z-index: 8;
   overflow: visible;
+  box-shadow: none;
 }
 
-/* Horizontal wall opening */
-.fp-object--door.is-horizontal {
-  box-shadow:
-    inset 0 2px 0 var(--plan-wall),
-    inset 0 -2px 0 var(--plan-wall),
-    0 0 0 0.5px rgba(0, 0, 0, 0.12);
-}
-
-/* Vertical wall opening */
+.fp-object--door.is-horizontal,
 .fp-object--door.is-vertical {
-  box-shadow:
-    inset 2px 0 0 var(--plan-wall),
-    inset -2px 0 0 var(--plan-wall),
-    0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
 }
 
 .fp-object--door .fp-object-label {
@@ -1489,14 +1464,36 @@ button {
   pointer-events: none;
 }
 
-/* AutoCAD 2D door: closed radius + arc + open leaf (quarter pie outline) */
-.door-symbol {
-  stroke: var(--plan-door);
-  stroke-width: 2.25;
+/* Maket door: light blue sector + dashed blue arc + solid leaf */
+.door-sector {
+  fill: rgba(96, 165, 250, 0.28);
+  stroke: none;
+}
+
+.door-arc {
+  stroke: #2f6fed;
+  stroke-width: 1.75;
+  stroke-linecap: butt;
   stroke-linejoin: round;
-  stroke-linecap: round;
-  fill: rgba(30, 34, 43, 0.04);
-  /* Keep stroke readable under canvas zoom transform */
+  fill: none;
+  stroke-dasharray: 5 3.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.door-leaf {
+  stroke: #1a1d24;
+  stroke-width: 2.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.door-symbol {
+  stroke: #2f6fed;
+  stroke-width: 1.75;
+  fill: none;
+  stroke-dasharray: 5 3.5;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1558,73 +1555,72 @@ button {
   z-index: 200;
 }
 
-.dims-group.is-selected-dims .dim-badge {
-  background: #111;
-  color: #ffe566;
-  font-size: 12px;
-  padding: 3px 8px;
-  z-index: 3;
-  box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.25);
+/* Full-length dimension bar + end ticks (Maket) */
+.dim-bar {
+  position: absolute;
+  background: var(--dim-line);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.95;
+}
+
+.dim-tick {
+  position: absolute;
+  background: var(--dim-line);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.95;
 }
 
 .dim-anchor {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  margin: -2.5px 0 0 -2.5px;
-  border-radius: 50%;
-  background: var(--dim-line);
-  border: 1px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
-  pointer-events: none;
-  z-index: 1;
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .dim-leader {
   position: absolute;
-  height: 1px;
-  margin-top: -0.5px;
+  height: 1.5px;
+  margin-top: -0.75px;
   background: var(--dim-line);
   transform-origin: 0 50%;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .dim-badge {
   position: absolute;
   transform: translate(-50%, -50%);
   margin: 0;
-  padding: 2px 6px;
-  border-radius: 1px;
-  background: var(--dim-badge-bg);
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.92);
   color: var(--dim-badge-fg);
-  border: 1px solid #111;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
+  border: none;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 1.25;
+  line-height: 1.2;
   letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: grab;
   pointer-events: auto;
   z-index: 2;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
   user-select: none;
   touch-action: none;
   -webkit-user-select: none;
-  min-width: 3.2em;
+  min-width: 0;
   text-align: center;
 }
 
-/* Name badges (door / window): same shape as sizes, cooler blue so they read as labels */
+/* Name badges (door / window) */
 .dim-badge-name {
-  background: #0b3d5c;
-  color: #e8f4fc;
-  border-color: #004578;
-  font-family: var(--font);
-  font-variant-numeric: normal;
+  background: rgba(47, 111, 237, 0.1);
+  color: #1d4ed8;
   font-weight: 600;
   min-width: 0;
   max-width: 140px;
@@ -1632,24 +1628,33 @@ button {
   text-overflow: ellipsis;
 }
 
+.dims-group.is-selected-dims .dim-badge {
+  color: #1d4ed8;
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 3;
+}
+
 .dims-group.is-selected-dims .dim-badge-name {
-  background: #0078d4;
-  color: #fff;
-  border-color: #005a9e;
-  box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.25);
+  background: rgba(47, 111, 237, 0.12);
+  color: #1d4ed8;
 }
 
 .dim-badge:hover {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .dim-badge:active,
 .dim-badge.is-dragging-dim {
   cursor: grabbing;
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.fp-object.is-selected {
+  outline-color: var(--plan-select-stroke) !important;
 }
 
 /* Resize handles */

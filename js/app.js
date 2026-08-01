@@ -124,13 +124,13 @@ function floorPlanApp() {
       };
     },
 
-    /** Infinite grid on the viewport, locked to world axes (pan + zoom). */
+    /** Soft dot grid locked to world axes (Maket-style). */
     viewportGridStyle() {
       const z = this.zoom || 1;
-      const minor = 10 * z; // 10 cm
-      const major = 100 * z; // 1 m
+      // ~10 cm dots at scale; keep readable when zoomed out
+      const step = Math.max(8, 10 * z);
       return {
-        backgroundSize: `${minor}px ${minor}px, ${major}px ${major}px, ${major}px ${major}px`,
+        backgroundSize: `${step}px ${step}px`,
         backgroundPosition: `${this.panX}px ${this.panY}px`,
       };
     },
@@ -168,17 +168,16 @@ function floorPlanApp() {
         style.transform = "none";
       }
       if (selected) {
-        const o = Math.max(2, Math.round(2 * invZ));
-        const off = Math.max(2, Math.round(3 * invZ));
-        const glow = Math.max(4, Math.round(5 * invZ));
-        style.outline = o + "px solid #0078d4";
-        style.outlineOffset = off + "px";
-        style.boxShadow =
-          "0 0 0 " +
-          Math.round(invZ) +
-          "px #ffffff, 0 0 0 " +
-          glow +
-          "px rgba(0, 120, 212, 0.5)";
+        // Maket-style: solid blue outline (zoom-compensated)
+        const o = Math.max(2, Math.round(2.25 * invZ));
+        style.outline = o + "px solid #2f6fed";
+        style.outlineOffset = "0px";
+        // Light blue selection fill for floors / terrain / large areas
+        if (obj.type === "floor" || obj.type === "terrain") {
+          style.backgroundColor = "rgba(59, 130, 246, 0.18)";
+        } else if (obj.type === "window" || obj.type === "door") {
+          style.backgroundColor = "rgba(147, 197, 253, 0.55)";
+        }
       }
       return style;
     },
@@ -283,18 +282,21 @@ function floorPlanApp() {
 
     dimsGroupClass(obj) {
       const parts = [];
-      if (this.showDimensionsGlobal && obj.showDimensions !== false && obj.visible !== false) {
-        parts.push("is-on");
-      } else parts.push("is-off");
+      if (this.dimsVisible(obj)) parts.push("is-on");
+      else parts.push("is-off");
       if (this.isSelected(obj.id)) parts.push("is-selected-dims");
       return parts.join(" ");
     },
 
-    /** Size labels show when global is on AND this object has showDimensions */
+    /**
+     * Size labels: always on for the selected object (Maket-style);
+     * otherwise require global toggle + per-object flag.
+     */
     dimsVisible(obj) {
-      if (!this.showDimensionsGlobal) return false;
       if (!obj) return false;
       if (obj.visible === false) return false;
+      if (this.isSelected(obj.id)) return true;
+      if (!this.showDimensionsGlobal) return false;
       return obj.showDimensions !== false;
     },
 
@@ -351,6 +353,10 @@ function floorPlanApp() {
 
     doorSymbolPath(obj) {
       return FPComponents.doorSymbolPath(obj);
+    },
+
+    doorSectorPath(obj) {
+      return FPComponents.doorSectorPath(obj);
     },
 
     doorArcPath(obj) {
@@ -449,41 +455,18 @@ function floorPlanApp() {
       return { x: box.x + box.width, y: box.y + box.height / 2 };
     },
 
-    /** Default resting point for the badge (world AABB; rotation-aware). */
+    /** Default resting point for the badge (outside edges — Maket-style). */
     dimDefaultPos(obj, axis) {
       const box = FPComponents.worldAABB(obj);
-      // Name badge: above the opening, easy to read
+      const invZ = 1 / Math.max(0.2, this.zoom || 1);
+      const gap = Math.max(14, Math.round(16 * invZ * 0.35));
       if (axis === "n") {
-        return { x: box.x + box.width / 2, y: box.y - 16 };
+        return { x: box.x + box.width / 2, y: box.y - gap };
       }
-      // Floors: labels sit just inside the edge so walls on the perimeter don't cover them.
-      // Walls / openings: labels sit outside.
       if (axis === "w") {
-        if (obj.type === "floor" || obj.type === "terrain") {
-          return { x: box.x + box.width / 2, y: box.y + box.height - 14 };
-        }
-        if (obj.type === "wall" && obj.height <= 24) {
-          // Horizontal wall: push label further below
-          return { x: box.x + box.width / 2, y: box.y + box.height + 20 };
-        }
-        // Doors/windows: size under the element
-        if (obj.type === "door" || obj.type === "window") {
-          return { x: box.x + box.width / 2, y: box.y + box.height + 18 };
-        }
-        return { x: box.x + box.width / 2, y: box.y + box.height + 16 };
+        return { x: box.x + box.width / 2, y: box.y + box.height + gap };
       }
-      // height axis
-      if (obj.type === "floor" || obj.type === "terrain") {
-        return { x: box.x + box.width - 14, y: box.y + box.height / 2 };
-      }
-      if (obj.type === "wall" && obj.width <= 24) {
-        // Vertical wall: push label further right
-        return { x: box.x + box.width + 20, y: box.y + box.height / 2 };
-      }
-      if (obj.type === "door" || obj.type === "window") {
-        return { x: box.x + box.width + 18, y: box.y + box.height / 2 };
-      }
-      return { x: box.x + box.width + 16, y: box.y + box.height / 2 };
+      return { x: box.x + box.width + gap, y: box.y + box.height / 2 };
     },
 
     /** Badge center in world coordinates. */
@@ -509,7 +492,62 @@ function floorPlanApp() {
       };
     },
 
-    /** Thin line from object edge anchor to badge (keeps the visual link). */
+    /**
+     * Dimension bar + ticks (Maket-style): full edge length outside the object,
+     * with short extension ticks at both ends.
+     */
+    dimBarStyle(obj, axis) {
+      const box = FPComponents.worldAABB(obj);
+      const invZ = 1 / Math.max(0.2, this.zoom || 1);
+      const gap = Math.max(14, Math.round(16 * invZ * 0.35));
+      const stroke = Math.max(1.25, 1.5 * invZ * 0.45);
+      if (axis === "w") {
+        return {
+          left: box.x + "px",
+          top: box.y + box.height + gap + "px",
+          width: box.width + "px",
+          height: stroke + "px",
+        };
+      }
+      if (axis === "h") {
+        return {
+          left: box.x + box.width + gap + "px",
+          top: box.y + "px",
+          width: stroke + "px",
+          height: box.height + "px",
+        };
+      }
+      return { display: "none" };
+    },
+
+    dimTickStyle(obj, axis, which) {
+      const box = FPComponents.worldAABB(obj);
+      const invZ = 1 / Math.max(0.2, this.zoom || 1);
+      const gap = Math.max(14, Math.round(16 * invZ * 0.35));
+      const tick = Math.max(6, Math.round(8 * invZ * 0.4));
+      const stroke = Math.max(1.25, 1.5 * invZ * 0.45);
+      if (axis === "w") {
+        const x = which === "start" ? box.x : box.x + box.width;
+        return {
+          left: x - stroke / 2 + "px",
+          top: box.y + box.height + gap - tick / 2 + "px",
+          width: stroke + "px",
+          height: tick + "px",
+        };
+      }
+      if (axis === "h") {
+        const y = which === "start" ? box.y : box.y + box.height;
+        return {
+          left: box.x + box.width + gap - tick / 2 + "px",
+          top: y - stroke / 2 + "px",
+          width: tick + "px",
+          height: stroke + "px",
+        };
+      }
+      return { display: "none" };
+    },
+
+    /** Thin line from object edge anchor to badge (legacy link for name badges). */
     dimLeaderStyle(obj, axis) {
       const a = this.dimAnchor(obj, axis);
       const b = this.dimBadgePos(obj, axis);
@@ -1448,18 +1486,38 @@ function floorPlanApp() {
       this.panY = 60;
     },
 
+    /**
+     * Wheel / trackpad:
+     * - plain scroll → pan canvas (smooth, 1:1 with gesture)
+     * - Ctrl/⌘ + scroll (or trackpad pinch) → zoom toward cursor
+     */
     onWheel(e) {
-      // Wheel: step to next/previous clean zoom level toward cursor
-      if (e.deltaY < 0) {
-        const next = this.zoomSteps.find((z) => z > this.zoom + 0.001);
-        this.setZoom(next != null ? next : this.maxZoom, e.clientX, e.clientY);
-      } else {
-        let prev = this.zoomSteps[0];
-        for (const z of this.zoomSteps) {
-          if (z < this.zoom - 0.001) prev = z;
-        }
-        this.setZoom(prev, e.clientX, e.clientY);
+      // Normalize line/page deltas to pixels
+      let dx = e.deltaX;
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) {
+        dx *= 16;
+        dy *= 16;
+      } else if (e.deltaMode === 2) {
+        dx *= 400;
+        dy *= 400;
       }
+
+      const zoomGesture = e.ctrlKey || e.metaKey;
+      if (zoomGesture) {
+        // Continuous zoom (smooth). Pinch often arrives as ctrl+wheel.
+        // Exponential scale so small trackpad steps feel even.
+        const intensity = 0.0018;
+        let factor = Math.exp(-dy * intensity);
+        // Cap per-event change so a single mouse notch is not huge
+        factor = clamp(factor, 0.88, 1.14);
+        this.setZoom(this.zoom * factor, e.clientX, e.clientY);
+        return;
+      }
+
+      // Pan canvas — natural scroll direction (content follows fingers)
+      this.panX -= dx;
+      this.panY -= dy;
     },
 
     // --- Pan ---

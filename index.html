@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Floor Plan Editor</title>
-    <link rel="stylesheet" href="css/styles.css?v=20" />
+    <link rel="stylesheet" href="css/styles.css?v=23" />
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.27/dist/interact.min.js"></script>
   </head>
@@ -118,7 +118,7 @@
                     class="palette-item"
                     :class="activeTool === 'pan' ? 'is-active' : ''"
                     @click="setTool('pan')"
-                    title="Hand: pan the canvas (H). Scroll to zoom."
+                    title="Hand: pan the canvas (H). Scroll pans · ⌘/Ctrl+scroll zooms."
                   >
                     <span class="tool-glyph tool-glyph-pan" aria-hidden="true"></span>
                     <span class="palette-label">Hand</span>
@@ -439,7 +439,7 @@
                 </div>
               </template>
 
-              <!-- Door swings in world space (only door objects; hinged at the opening) -->
+              <!-- Door swings (Maket-style: light blue sector + dashed arc + solid leaf) -->
               <div class="door-swing-layer" aria-hidden="true">
                 <template x-for="obj in doorObjects()" :key="'swing-' + obj.id">
                   <svg
@@ -448,15 +448,9 @@
                     :style="doorSwingStyle(obj)"
                     x-effect="$el.setAttribute('viewBox', doorSwingViewBox(obj))"
                   >
-                    <!--
-                      AutoCAD 2D door: quarter-circle outline
-                      closed radius (along wall) + arc + open leaf (90°)
-                    -->
-                    <path
-                      class="door-symbol"
-                      :d="doorSymbolPath(obj)"
-                      fill="none"
-                    ></path>
+                    <path class="door-sector" :d="doorSectorPath(obj)"></path>
+                    <path class="door-arc" :d="doorArcPath(obj)" fill="none"></path>
+                    <path class="door-leaf" :d="doorLeafPath(obj)" fill="none"></path>
                   </svg>
                 </template>
               </div>
@@ -487,8 +481,10 @@
                       </span>
                     </template>
 
-                    <span class="dim-leader" :style="dimLeaderStyle(obj, 'w')"></span>
-                    <span class="dim-anchor" :style="dimAnchorStyle(obj, 'w')"></span>
+                    <!-- Width dim: full bar + ticks + label (Maket-style blue) -->
+                    <span class="dim-bar dim-bar-w" :style="dimBarStyle(obj, 'w')"></span>
+                    <span class="dim-tick" :style="dimTickStyle(obj, 'w', 'start')"></span>
+                    <span class="dim-tick" :style="dimTickStyle(obj, 'w', 'end')"></span>
                     <button
                       type="button"
                       class="dim-badge"
@@ -500,8 +496,10 @@
                       @pointerdown.prevent.stop="onDimPointerDown($event, obj.id, 'w')"
                     ></button>
 
-                    <span class="dim-leader" :style="dimLeaderStyle(obj, 'h')"></span>
-                    <span class="dim-anchor" :style="dimAnchorStyle(obj, 'h')"></span>
+                    <!-- Height dim -->
+                    <span class="dim-bar dim-bar-h" :style="dimBarStyle(obj, 'h')"></span>
+                    <span class="dim-tick" :style="dimTickStyle(obj, 'h', 'start')"></span>
+                    <span class="dim-tick" :style="dimTickStyle(obj, 'h', 'end')"></span>
                     <button
                       type="button"
                       class="dim-badge"
@@ -543,7 +541,7 @@
               class="tool-btn"
               :class="activeTool === 'pan' ? 'is-active' : ''"
               @click="setTool('pan')"
-              title="Hand — pan canvas (H). Scroll to zoom."
+              title="Hand — pan canvas (H). Scroll pans · ⌘/Ctrl+scroll zooms."
             >
               <span class="tool-icon" aria-hidden="true">✋</span>
               Hand
@@ -580,9 +578,9 @@
             <span class="dot">·</span>
             <span
               x-text="activeTool === 'select'
-                ? 'Tool: Select'
+                ? 'Tool: Select · scroll pan · ⌘/Ctrl+scroll zoom'
                 : activeTool === 'pan'
-                  ? 'Tool: Hand (drag to pan · scroll to zoom)'
+                  ? 'Tool: Hand · drag/scroll pan · ⌘/Ctrl+scroll zoom'
                   : ('Tool: Place ' + activeTool)"
             ></span>
           </div>
@@ -825,9 +823,9 @@
       ></div>
     </div>
 
-    <script src="js/components.js?v=20"></script>
-    <script src="js/snap.js?v=20"></script>
-    <script src="js/interact-setup.js?v=20"></script>
-    <script src="js/app.js?v=20"></script>
+    <script src="js/components.js?v=23"></script>
+    <script src="js/snap.js?v=23"></script>
+    <script src="js/interact-setup.js?v=23"></script>
+    <script src="js/app.js?v=23"></script>
   </body>
 </html>
