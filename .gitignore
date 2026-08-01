@@ -1,0 +1,9 @@
+node_modules/
+tests/output/
+.DS_Store
+.playwright-mcp/
+package-lock.json
+
+# Local Playwright / design screenshots (not product assets)
+*.png
+!docs/**/*.png

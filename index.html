@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Floor Plan Editor</title>
+    <link rel="stylesheet" href="css/styles.css?v=20" />
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.27/dist/interact.min.js"></script>
+  </head>
+  <body>
+    <div
+      id="app"
+      class="app"
+      x-data="floorPlanApp()"
+      x-init="init()"
+      @keydown.window="onKeydown($event)"
+    >
+      <!-- Top app bar -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div class="brand-text">
+              <input
+                class="plan-name"
+                type="text"
+                x-model="planName"
+                aria-label="Plan name"
+              />
+              <span class="plan-meta" x-text="planMeta()"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="header-center">
+          <div class="mode-pills" role="tablist" aria-label="View mode">
+            <button type="button" class="mode-pill is-active" role="tab" aria-selected="true">Layout</button>
+            <button type="button" class="mode-pill" role="tab" aria-selected="false" disabled title="Coming soon">Visualize</button>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <div class="history-btns" role="group" aria-label="History">
+            <button
+              type="button"
+              class="btn btn-secondary btn-icon-only"
+              :disabled="!canUndo"
+              @click="undo()"
+              title="Undo (Ctrl/⌘ Z)"
+              aria-label="Undo"
+            >
+              ↶
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-icon-only"
+              :disabled="!canRedo"
+              @click="redo()"
+              title="Redo (Ctrl/⌘ Shift Z)"
+              aria-label="Redo"
+            >
+              ↷
+            </button>
+          </div>
+          <button
+            type="button"
+            class="btn btn-toggle"
+            :class="showDimensionsGlobal ? 'is-on' : ''"
+            @click="toggleGlobalDimensions()"
+            :title="showDimensionsGlobal ? 'Hide all size labels' : 'Show all size labels'"
+            :aria-pressed="showDimensionsGlobal.toString()"
+          >
+            <span class="btn-toggle-dot" aria-hidden="true"></span>
+            Sizes
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="!selectedId"
+            @click="deleteSelected()"
+            title="Delete selected (Delete / Backspace)"
+          >
+            Delete
+          </button>
+          <button type="button" class="btn btn-primary" @click="exportPlan()" title="Export plan as JSON">
+            Export
+          </button>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <!-- Left: tools + layers -->
+        <aside class="panel panel-left" aria-label="Tools and layers">
+          <div class="panel-header">
+            <h2>Tools</h2>
+          </div>
+
+          <div class="palette-scroll palette-scroll-compact">
+            <div class="palette-group">
+              <div class="palette-group-label">Edit</div>
+              <ul class="palette" role="list">
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'select' ? 'is-active' : ''"
+                    @click="setTool('select')"
+                    title="Select and move objects (V)"
+                  >
+                    <span class="tool-glyph tool-glyph-select" aria-hidden="true"></span>
+                    <span class="palette-label">Select</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'pan' ? 'is-active' : ''"
+                    @click="setTool('pan')"
+                    title="Hand: pan the canvas (H). Scroll to zoom."
+                  >
+                    <span class="tool-glyph tool-glyph-pan" aria-hidden="true"></span>
+                    <span class="palette-label">Hand</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="palette-group">
+              <div class="palette-group-label">Place</div>
+              <ul class="palette" role="list">
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'terrain' ? 'is-active' : ''"
+                    data-component-type="terrain"
+                    @pointerdown="startPaletteDrag($event, 'terrain')"
+                    @click="setTool('terrain')"
+                    title="Place terrain / site plot"
+                  >
+                    <span class="tool-glyph tool-glyph-terrain" aria-hidden="true"></span>
+                    <span class="palette-label">Terrain</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'floor' ? 'is-active' : ''"
+                    data-component-type="floor"
+                    @pointerdown="startPaletteDrag($event, 'floor')"
+                    @click="setTool('floor')"
+                    title="Place floor (drag or click canvas)"
+                  >
+                    <span class="tool-glyph tool-glyph-floor" aria-hidden="true"></span>
+                    <span class="palette-label">Floor</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'wall' ? 'is-active' : ''"
+                    data-component-type="wall"
+                    @pointerdown="startPaletteDrag($event, 'wall')"
+                    @click="setTool('wall')"
+                    title="Place wall (drag or click canvas)"
+                  >
+                    <span class="tool-glyph tool-glyph-wall" aria-hidden="true"></span>
+                    <span class="palette-label">Wall</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'window' ? 'is-active' : ''"
+                    data-component-type="window"
+                    @pointerdown="startPaletteDrag($event, 'window')"
+                    @click="setTool('window')"
+                    title="Place window (drag or click canvas)"
+                  >
+                    <span class="tool-glyph tool-glyph-window" aria-hidden="true"></span>
+                    <span class="palette-label">Window</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="palette-item"
+                    :class="activeTool === 'door' ? 'is-active' : ''"
+                    data-component-type="door"
+                    @pointerdown="startPaletteDrag($event, 'door')"
+                    @click="setTool('door')"
+                    title="Place door (drag or click canvas)"
+                  >
+                    <span class="tool-glyph tool-glyph-door" aria-hidden="true"></span>
+                    <span class="palette-label">Door</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="layers-panel">
+            <div class="panel-header layers-header">
+              <h2>Layers</h2>
+              <span class="panel-badge" x-text="objects.length"></span>
+            </div>
+            <div class="layers-toolbar" role="toolbar" aria-label="Layer actions">
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!canGroup"
+                @click="groupSelected()"
+                title="Group selection (⌘/Ctrl G)"
+              >
+                Group
+              </button>
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!canUngroup"
+                @click="ungroupSelected()"
+                title="Ungroup (⌘/Ctrl Shift G)"
+              >
+                Ungroup
+              </button>
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!selectedId"
+                @click="bringForward(selectedId)"
+                title="Bring forward (])"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!selectedId"
+                @click="sendBackward(selectedId)"
+                title="Send backward ([)"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!selectedId"
+                @click="bringToFront(selectedId)"
+                title="Bring to front"
+              >
+                ⇈
+              </button>
+              <button
+                type="button"
+                class="btn-layer"
+                :disabled="!selectedId"
+                @click="sendToBack(selectedId)"
+                title="Send to back"
+              >
+                ⇊
+              </button>
+            </div>
+            <ul
+              class="layers-list"
+              role="listbox"
+              aria-label="Layer stack (top = front)"
+              @dragover="onLayerDragOver($event)"
+            >
+              <template x-for="row in layersView()" :key="row.kind + '-' + row.id">
+                <li
+                  class="layer-row"
+                  :data-layer-id="row.id"
+                  :data-layer-kind="row.kind"
+                  :class="{
+                    'is-selected': row.kind === 'object' ? isSelected(row.id) : isGroupSelected(row.id),
+                    'is-indented': row.kind === 'object' && row.indented,
+                    'is-group': row.kind === 'group',
+                    'is-hidden-row': row.kind === 'object' && row.obj.visible === false,
+                    'is-locked-row': row.kind === 'object' && row.obj.locked,
+                  }"
+                  draggable="true"
+                  @dragstart="onLayerDragStart($event, row.id, row.kind)"
+                  @drop="onLayerDrop($event, row.id, row.kind)"
+                  @dragover="onLayerDragOver($event)"
+                  @click="row.kind === 'group' ? selectGroup(row.id, { event: $event }) : selectObject(row.id, { event: $event })"
+                >
+                  <template x-if="row.kind === 'group'">
+                    <div class="layer-row-inner">
+                      <button
+                        type="button"
+                        class="layer-collapse"
+                        @click.stop="toggleGroupCollapsed(row.id)"
+                        :title="row.group.collapsed ? 'Expand group' : 'Collapse group'"
+                        x-text="row.group.collapsed ? '▸' : '▾'"
+                      ></button>
+                      <span class="layer-type layer-type-group" aria-hidden="true">G</span>
+                      <input
+                        class="layer-name-input"
+                        type="text"
+                        :value="row.group.name"
+                        @click.stop
+                        @change="renameGroup(row.id, $event.target.value)"
+                        @keydown.enter.prevent="$event.target.blur()"
+                      />
+                      <span class="layer-meta" x-text="row.memberCount"></span>
+                      <button
+                        type="button"
+                        class="layer-icon-btn"
+                        :class="row.allVisible ? '' : 'is-off'"
+                        @click.stop="toggleGroupVisible(row.id)"
+                        :title="row.allVisible ? 'Hide group' : 'Show group'"
+                      >
+                        👁
+                      </button>
+                      <button
+                        type="button"
+                        class="layer-icon-btn"
+                        :class="row.allLocked ? 'is-on' : ''"
+                        @click.stop="toggleGroupLocked(row.id)"
+                        :title="row.allLocked ? 'Unlock group' : 'Lock group'"
+                      >
+                        🔒
+                      </button>
+                    </div>
+                  </template>
+                  <template x-if="row.kind === 'object'">
+                    <div class="layer-row-inner">
+                      <span class="layer-drag" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+                      <span
+                        class="layer-type"
+                        :class="'layer-type-' + row.obj.type"
+                        x-text="row.obj.type.charAt(0).toUpperCase()"
+                        :title="row.obj.type"
+                      ></span>
+                      <span class="layer-name" x-text="layerDisplayName(row.obj)"></span>
+                      <button
+                        type="button"
+                        class="layer-icon-btn"
+                        :class="row.obj.visible === false ? 'is-off' : ''"
+                        @click.stop="toggleVisible(row.id)"
+                        :title="row.obj.visible === false ? 'Show' : 'Hide'"
+                      >
+                        👁
+                      </button>
+                      <button
+                        type="button"
+                        class="layer-icon-btn"
+                        :class="row.obj.locked ? 'is-on' : ''"
+                        @click.stop="toggleLocked(row.id)"
+                        :title="row.obj.locked ? 'Unlock' : 'Lock'"
+                      >
+                        🔒
+                      </button>
+                    </div>
+                  </template>
+                </li>
+              </template>
+              <li class="layers-empty" x-show="objects.length === 0" x-cloak>No objects</li>
+            </ul>
+          </div>
+        </aside>
+
+        <!-- Center: canvas -->
+        <main class="canvas-shell" aria-label="Drawing canvas">
+          <div
+            class="canvas-viewport"
+            x-ref="viewport"
+            :class="{
+              'tool-place': isPlaceTool,
+              'tool-pan': activeTool === 'pan' || panState.spaceDown,
+              'is-panning': activeTool === 'pan' || panState.spaceDown || panState.active,
+            }"
+            :style="viewportGridStyle()"
+            @wheel.prevent="onWheel($event)"
+            @pointerdown="onViewportPointerDown($event)"
+            @pointermove="onViewportPointerMove($event)"
+            @pointerup="onViewportPointerUp($event)"
+            @pointercancel="onViewportPointerUp($event)"
+            @click="onViewportClick($event)"
+          >
+            <div class="canvas-world" x-ref="world" :style="worldStyle()">
+              <div class="grid-bg" aria-hidden="true"></div>
+              <!-- 1 m scale bar (same scale as object geometry: 100 px = 1 m) -->
+              <div class="scale-bar" aria-hidden="true">
+                <div class="scale-bar-line"></div>
+                <div class="scale-bar-label">1.00 m</div>
+              </div>
+
+              <template x-for="obj in objects" :key="obj.id">
+                <div
+                  class="fp-object"
+                  :class="objectClass(obj)"
+                  :data-id="obj.id"
+                  :data-type="obj.type"
+                  :data-selected="isSelected(obj.id) ? '1' : '0'"
+                  :style="objectStyle(obj)"
+                  @pointerdown="onObjectPointerDown($event, obj.id)"
+                >
+                  <!-- Floors: name + area m² in the center. Terrain: name only. -->
+                  <span
+                    class="fp-object-label"
+                    :style="labelStyle(obj)"
+                    x-show="obj.type === 'floor' || (obj.type === 'terrain' && obj.name)"
+                  >
+                    <span
+                      class="fp-object-label-name"
+                      x-show="obj.name"
+                      x-text="obj.name"
+                    ></span>
+                    <span
+                      class="fp-object-label-area"
+                      x-show="obj.type === 'floor'"
+                      x-text="formatObjectArea(obj)"
+                    ></span>
+                  </span>
+                  <template x-if="obj.type === 'window'">
+                    <span class="window-pane" aria-hidden="true"></span>
+                  </template>
+
+                  <div
+                    class="resize-handles"
+                    :class="selectedId === obj.id ? 'is-visible' : ''"
+                    aria-hidden="true"
+                  >
+                    <span class="handle handle-n" data-edge="n"></span>
+                    <span class="handle handle-s" data-edge="s"></span>
+                    <span class="handle handle-e" data-edge="e"></span>
+                    <span class="handle handle-w" data-edge="w"></span>
+                    <span class="handle handle-ne" data-edge="ne"></span>
+                    <span class="handle handle-nw" data-edge="nw"></span>
+                    <span class="handle handle-se" data-edge="se"></span>
+                    <span class="handle handle-sw" data-edge="sw"></span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Door swings in world space (only door objects; hinged at the opening) -->
+              <div class="door-swing-layer" aria-hidden="true">
+                <template x-for="obj in doorObjects()" :key="'swing-' + obj.id">
+                  <svg
+                    class="door-swing-svg"
+                    xmlns="http://www.w3.org/2000/svg"
+                    :style="doorSwingStyle(obj)"
+                    x-effect="$el.setAttribute('viewBox', doorSwingViewBox(obj))"
+                  >
+                    <!--
+                      AutoCAD 2D door: quarter-circle outline
+                      closed radius (along wall) + arc + open leaf (90°)
+                    -->
+                    <path
+                      class="door-symbol"
+                      :d="doorSymbolPath(obj)"
+                      fill="none"
+                    ></path>
+                  </svg>
+                </template>
+              </div>
+
+              <!-- Size labels live above objects so interact.js never steals the drag -->
+              <div class="dims-layer" aria-hidden="false">
+                <template x-for="obj in objects" :key="'dims-' + obj.id">
+                  <div
+                    class="dims-group"
+                    :class="dimsGroupClass(obj)"
+                    :data-obj-id="obj.id"
+                  >
+                    <!-- Name badge for doors / windows (same label style as sizes) -->
+                    <template x-if="showsNameBadge(obj)">
+                      <span>
+                        <span class="dim-leader" :style="dimLeaderStyle(obj, 'n')"></span>
+                        <span class="dim-anchor" :style="dimAnchorStyle(obj, 'n')"></span>
+                        <button
+                          type="button"
+                          class="dim-badge dim-badge-name"
+                          :data-obj-id="obj.id"
+                          data-axis="n"
+                          :style="dimBadgeStyle(obj, 'n')"
+                          :title="nameBadgeText(obj) + ' — drag to move'"
+                          x-text="nameBadgeText(obj)"
+                          @pointerdown.prevent.stop="onDimPointerDown($event, obj.id, 'n')"
+                        ></button>
+                      </span>
+                    </template>
+
+                    <span class="dim-leader" :style="dimLeaderStyle(obj, 'w')"></span>
+                    <span class="dim-anchor" :style="dimAnchorStyle(obj, 'w')"></span>
+                    <button
+                      type="button"
+                      class="dim-badge"
+                      :data-obj-id="obj.id"
+                      data-axis="w"
+                      :style="dimBadgeStyle(obj, 'w')"
+                      :title="'Width ' + formatSize(obj.width) + ' — drag to move'"
+                      x-text="formatSize(obj.width)"
+                      @pointerdown.prevent.stop="onDimPointerDown($event, obj.id, 'w')"
+                    ></button>
+
+                    <span class="dim-leader" :style="dimLeaderStyle(obj, 'h')"></span>
+                    <span class="dim-anchor" :style="dimAnchorStyle(obj, 'h')"></span>
+                    <button
+                      type="button"
+                      class="dim-badge"
+                      :data-obj-id="obj.id"
+                      data-axis="h"
+                      :style="dimBadgeStyle(obj, 'h')"
+                      :title="'Height ' + formatSize(obj.height) + ' — drag to move'"
+                      x-text="formatSize(obj.height)"
+                      @pointerdown.prevent.stop="onDimPointerDown($event, obj.id, 'h')"
+                    ></button>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Floating zoom (bottom-right) -->
+          <div class="float-zoom" role="group" aria-label="Zoom">
+            <button type="button" class="float-btn" @click="zoomIn()" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="float-btn" @click="zoomOut()" title="Zoom out" aria-label="Zoom out">−</button>
+            <div class="float-zoom-label" x-text="Math.round(zoom * 100) + '%'" title="Current zoom"></div>
+            <button type="button" class="float-btn float-btn-reset" @click="resetView()" title="Reset view (100%)" aria-label="Reset view">⟲</button>
+          </div>
+
+          <!-- Bottom toolbar -->
+          <div class="float-toolbar" role="toolbar" aria-label="Tools">
+            <button
+              type="button"
+              class="tool-btn"
+              :class="activeTool === 'select' ? 'is-active' : ''"
+              @click="setTool('select')"
+              title="Select (V)"
+            >
+              <span class="tool-icon" aria-hidden="true">↖</span>
+              Select
+            </button>
+            <button
+              type="button"
+              class="tool-btn"
+              :class="activeTool === 'pan' ? 'is-active' : ''"
+              @click="setTool('pan')"
+              title="Hand — pan canvas (H). Scroll to zoom."
+            >
+              <span class="tool-icon" aria-hidden="true">✋</span>
+              Hand
+            </button>
+            <span class="tool-divider" aria-hidden="true"></span>
+            <template x-for="item in palette" :key="'tool-' + item.type">
+              <button
+                type="button"
+                class="tool-btn"
+                :class="activeTool === item.type ? 'is-active' : ''"
+                @click="setTool(item.type)"
+                :title="'Place ' + item.label"
+              >
+                <span class="tool-swatch" :class="'swatch--' + item.type" aria-hidden="true"></span>
+                <span x-text="item.label"></span>
+              </button>
+            </template>
+            <span class="tool-divider" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="tool-btn tool-btn-danger"
+              :disabled="!selectedId"
+              @click="deleteSelected()"
+              title="Delete selected"
+            >
+              Delete
+            </button>
+          </div>
+
+          <div class="canvas-status" aria-live="polite">
+            <span x-text="objects.length + ' object' + (objects.length === 1 ? '' : 's')"></span>
+            <span class="dot">·</span>
+            <span x-text="selected ? ('Selected: ' + objectDisplayName(selected)) : 'Nothing selected'"></span>
+            <span class="dot">·</span>
+            <span
+              x-text="activeTool === 'select'
+                ? 'Tool: Select'
+                : activeTool === 'pan'
+                  ? 'Tool: Hand (drag to pan · scroll to zoom)'
+                  : ('Tool: Place ' + activeTool)"
+            ></span>
+          </div>
+        </main>
+
+        <!-- Right: inspector -->
+        <aside class="panel panel-right" aria-label="Properties">
+          <div class="panel-header panel-header-right">
+            <h2
+              x-text="selectedIds.length > 1
+                ? (selectedIds.length + ' selected')
+                : (selected ? objectDisplayName(selected) : 'Inspector')"
+            ></h2>
+            <span
+              class="panel-badge"
+              x-show="selected"
+              x-cloak
+              x-text="selectedIds.length > 1 ? 'multi' : (selected ? selected.type : '')"
+            ></span>
+          </div>
+
+          <template x-if="!selected">
+            <div class="props-empty">
+              No selection
+              <span class="props-empty-hint">Click the canvas or a Layers row</span>
+            </div>
+          </template>
+
+          <template x-if="selected">
+            <form class="props-scroll props-form" @submit.prevent>
+              <!-- id stays on object for scripting; not shown -->
+              <div class="prop-grid">
+                <template x-if="selected.type !== 'wall'">
+                  <div class="prop-row">
+                    <label for="prop-name">Name</label>
+                    <input
+                      id="prop-name"
+                      type="text"
+                      :value="selected.name"
+                      @change="updateSelected({ name: $event.target.value })"
+                      placeholder="Name"
+                    />
+                  </div>
+                </template>
+
+                <div class="prop-row">
+                  <label for="prop-w">W</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-w"
+                      type="number"
+                      step="0.01"
+                      min="0.08"
+                      :value="formatMeters(selected.width)"
+                      @change="updateSelected({ width: Math.max(8, metersToPx($event.target.value)) })"
+                    />
+                    <span>m</span>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <label for="prop-h">H</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-h"
+                      type="number"
+                      step="0.01"
+                      min="0.08"
+                      :value="formatMeters(selected.height)"
+                      @change="updateSelected({ height: Math.max(8, metersToPx($event.target.value)) })"
+                    />
+                    <span>m</span>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <label for="prop-x">X</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-x"
+                      type="number"
+                      step="0.01"
+                      :value="formatMeters(selected.x)"
+                      @change="updateSelected({ x: metersToPx($event.target.value) })"
+                    />
+                    <span>m</span>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <label for="prop-y">Y</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-y"
+                      type="number"
+                      step="0.01"
+                      :value="formatMeters(selected.y)"
+                      @change="updateSelected({ y: metersToPx($event.target.value) })"
+                    />
+                    <span>m</span>
+                  </div>
+                </div>
+
+                <div class="prop-row">
+                  <label for="prop-rot">Rotate</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-rot"
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="359"
+                      :value="Math.round(normalizeRotation(selected.rotation))"
+                      @change="setRotation($event.target.value)"
+                    />
+                    <span>°</span>
+                  </div>
+                </div>
+                <div class="prop-row prop-row-rot-presets">
+                  <label class="sr-only">Rotation presets</label>
+                  <div class="rot-presets">
+                    <button type="button" class="btn-rot" title="Rotate −45°" @click="nudgeRotation(-45)">−45°</button>
+                    <button type="button" class="btn-rot" title="Rotate −15°" @click="nudgeRotation(-15)">−15°</button>
+                    <button type="button" class="btn-rot" title="Reset 0°" @click="setRotation(0)">0°</button>
+                    <button type="button" class="btn-rot" title="Rotate +15°" @click="nudgeRotation(15)">+15°</button>
+                    <button type="button" class="btn-rot" title="Rotate +45°" @click="nudgeRotation(45)">+45°</button>
+                    <button type="button" class="btn-rot" title="Rotate 90°" @click="nudgeRotation(90)">90°</button>
+                  </div>
+                </div>
+
+                <div class="prop-row" x-show="selected.type === 'floor' || selected.type === 'terrain'" x-cloak>
+                  <label for="prop-label-rot">Label</label>
+                  <div class="prop-unit">
+                    <input
+                      id="prop-label-rot"
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="359"
+                      :value="Math.round(normalizeRotation(selected.labelRotation))"
+                      @change="setLabelRotation($event.target.value)"
+                    />
+                    <span>°</span>
+                  </div>
+                </div>
+                <div
+                  class="prop-row prop-row-rot-presets"
+                  x-show="selected.type === 'floor' || selected.type === 'terrain'"
+                  x-cloak
+                >
+                  <label class="sr-only">Label rotation presets</label>
+                  <div class="rot-presets">
+                    <button type="button" class="btn-rot" title="Label −45°" @click="nudgeLabelRotation(-45)">−45°</button>
+                    <button type="button" class="btn-rot" title="Label upright" @click="setLabelRotation(0)">0°</button>
+                    <button type="button" class="btn-rot" title="Label +45°" @click="nudgeLabelRotation(45)">+45°</button>
+                    <button type="button" class="btn-rot" title="Label +90°" @click="nudgeLabelRotation(90)">90°</button>
+                    <button type="button" class="btn-rot" title="Match floor rotation" @click="matchLabelToObject()">Match</button>
+                  </div>
+                </div>
+
+                <div class="prop-row">
+                  <label for="prop-opacity">Opacity</label>
+                  <div class="prop-unit prop-unit-opacity">
+                    <input
+                      id="prop-opacity-range"
+                      class="prop-opacity-range"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      :value="opacityPercent(selected)"
+                      @pointerdown="pushHistory()"
+                      @input="setOpacityPercent($event.target.value, false)"
+                      title="Transparency"
+                    />
+                    <input
+                      id="prop-opacity"
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      :value="opacityPercent(selected)"
+                      @change="setOpacityPercent($event.target.value)"
+                    />
+                    <span>%</span>
+                  </div>
+                </div>
+
+                <div class="prop-row" x-show="selected.type === 'door'" x-cloak>
+                  <label for="prop-hinge">Hinge</label>
+                  <select
+                    id="prop-hinge"
+                    :value="selected.hinge || 'start'"
+                    @change="updateSelected({ hinge: $event.target.value })"
+                  >
+                    <option value="start" x-text="doorHingeStartLabel(selected)"></option>
+                    <option value="end" x-text="doorHingeEndLabel(selected)"></option>
+                  </select>
+                </div>
+                <div class="prop-row" x-show="selected.type === 'door'" x-cloak>
+                  <label for="prop-opens">Opens</label>
+                  <select
+                    id="prop-opens"
+                    :value="selected.opens || 'neg'"
+                    @change="updateSelected({ opens: $event.target.value })"
+                  >
+                    <option value="neg" x-text="doorOpensNegLabel(selected)"></option>
+                    <option value="pos" x-text="doorOpensPosLabel(selected)"></option>
+                  </select>
+                </div>
+
+                <div class="prop-row prop-row-check">
+                  <label for="prop-dims">Size labels</label>
+                  <input
+                    id="prop-dims"
+                    type="checkbox"
+                    class="toggle-input"
+                    :checked="selected.showDimensions !== false"
+                    @change="updateSelected({ showDimensions: $event.target.checked })"
+                  />
+                </div>
+              </div>
+
+              <div class="props-actions">
+                <button type="button" class="btn-link" @click="resetDimOffsets(selectedId)">
+                  Reset labels
+                </button>
+                <button type="button" class="btn-link btn-link-danger" @click="deleteSelected()">
+                  Delete
+                </button>
+              </div>
+            </form>
+          </template>
+        </aside>
+      </div>
+
+      <div
+        class="palette-ghost"
+        x-show="paletteDrag.active"
+        x-cloak
+        :class="'fp-object--' + paletteDrag.type"
+        :style="paletteGhostStyle()"
+      ></div>
+    </div>
+
+    <script src="js/components.js?v=20"></script>
+    <script src="js/snap.js?v=20"></script>
+    <script src="js/interact-setup.js?v=20"></script>
+    <script src="js/app.js?v=20"></script>
+  </body>
+</html>

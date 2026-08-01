@@ -1,0 +1,17 @@
+{
+  "name": "oarfish",
+  "version": "1.0.0",
+  "description": "Light SaaS-style floor plan canvas built with **Alpine.js**, **interact.js**, and vanilla JS.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/e2e-smoke.mjs",
+    "test:e2e": "node tests/e2e-smoke.mjs",
+    "serve": "python3 -m http.server 8765"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
