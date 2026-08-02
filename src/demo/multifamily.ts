@@ -1,9 +1,12 @@
 /**
  * Multifamily demo layout seed.
- * - 4 apartments, each 6.00 × 6.00 m (36 m²) clear floor
- * - Recuo lateral 1.50 m
- * - Walls 0.20 m thick
- * 100 px = 1 m
+ * - Lot 16.00 × 33.00 m
+ * - Building 7.20 m wide × 30.00 m deep (+ 3.00 m faixa frontal)
+ * - 4 identical apartments + central stair:
+ *     Apto 4 · Apto 3 · Escada 2.00 m · Apto 2 · Apto 1
+ * - Stairs 2.00 m; remaining 28.00 m / 4 → each apt 7.20 × 7.00 m (50.4 m²)
+ * - Every apt is the same template stamp (rooms, fixtures, doors, windows)
+ * - Walls 0.20 m thick · 100 px = 1 m
  */
 
 import type { DemoLayout, Group, ObjectType, PlanObject, PlanObjectOverrides } from "@fp/types";
@@ -15,525 +18,635 @@ import { m } from "@fp/units";
  * @returns Objects, groups, and next group sequence
  */
 export function createDemoLayout(): DemoLayout {
-    const t = WALL_T; // 0.20 m
-    const objs: PlanObject[] = [];
-    let seq = 0;
-    const add = (type: ObjectType, overrides: PlanObjectOverrides & { groupId?: string } = {}): PlanObject => {
-      seq += 1;
-      const o = createObject(type, {
-        id: type + "-" + seq,
-        showDimensions: false,
-        ...overrides,
-      });
-      objs.push(o);
-      return o;
-    };
+  const t = WALL_T; // 0.20 m
+  const objs: PlanObject[] = [];
+  let seq = 0;
+  const add = (type: ObjectType, overrides: PlanObjectOverrides & { groupId?: string } = {}): PlanObject => {
+    seq += 1;
+    const o = createObject(type, {
+      id: type + "-" + seq,
+      showDimensions: false,
+      ...overrides,
+    });
+    objs.push(o);
+    return o;
+  };
 
-    // --- Lot ---
-    const OX = m(0.5);
-    const OY = m(0.5);
-    const SIDE = m(1.5); // recuo lateral
-    const FRONT = m(3.0);
-    const MOTO_D = m(3.0);
-    const APT = m(6.0); // each apartment 6 × 6 m
+  // --- Lot frame (FRENTE = +Y, FUNDO = −Y / top) ---
+  const OX = m(0.5);
+  const OY = m(0.5);
+  const LOT_W = m(16);
+  const LOT_H = m(33);
+  const SIDE = m(1.5);
+  const FRONT = m(3);
+  const MOTO_D = m(3);
 
-    const BX = OX + SIDE;
-    const BY = OY;
-    const BLDG_W = APT;
-    const BLDG_H = APT * 4; // 4 stacked apts → 24 m
-    const PARK_X = BX + BLDG_W;
-    const LOT_W = m(16);
-    const LOT_H = BLDG_H + FRONT;
-    const PARK_W = OX + LOT_W - PARK_X;
+  // Building on left after side setback; depth = lot − front strip
+  const BLDG_W = m(7.2);
+  const BLDG_H = LOT_H - FRONT; // 30 m
+  const BX = OX + SIDE;
+  const BY = OY;
+
+  /** Central stair core (dois lances) along building depth. */
+  const STAIR_H = m(2.0);
+  /** Clear apt depth: (30 − 2) / 4 = 7.00 m each. */
+  const APT_H = (BLDG_H - STAIR_H) / 4;
+
+  /*
+   * Room grid 7.20 × 7.00 m:
+   *
+   *   ┌─ 2.80 ─┬──── 4.40 ────┐
+   *   │ Banho  │ Quarto       │  3.00
+   *   ├────────┼──────────────┤
+   *   │Cozinha │ Sala Estar   │  4.00
+   *   └────────┴──────────────┘
+   *     3.00        4.20
+   *
+   *   Areas: 8.40 + 13.20 + 12.00 + 16.80 = 50.40 m²
+   */
+  const LEFT_W = m(2.8); // banho
+  const RIGHT_W = BLDG_W - LEFT_W; // quarto
+  const TOP_H = m(3.0); // banho + quarto depth
+  const BOT_H = APT_H - TOP_H; // 4.0 open living + kitchen
+  const COZ_W = m(3.0);
+
+  const PARK_X = BX + BLDG_W;
+  const PARK_W = OX + LOT_W - PARK_X;
+
+  // Terrain
+  add("terrain", {
+    x: OX,
+    y: OY,
+    width: LOT_W,
+    height: LOT_H,
+    name: "Lot 16×33 m",
+    showDimensions: true,
+  });
+
+  // Side setback
+  add("floor", {
+    x: OX,
+    y: OY,
+    width: SIDE,
+    height: BLDG_H,
+    name: "Recuo lateral 1,50 m",
+  });
+
+  // Front free strip
+  add("floor", {
+    x: OX,
+    y: OY + BLDG_H,
+    width: LOT_W,
+    height: FRONT,
+    name: "Faixa frontal 3,00 m",
+    showDimensions: true,
+  });
+
+  // Drive
+  add("floor", {
+    x: PARK_X,
+    y: OY + MOTO_D,
+    width: PARK_W,
+    height: BLDG_H - MOTO_D,
+    name: "Circulação de veículos",
+  });
+
+  // Motos
+  add("floor", {
+    x: PARK_X,
+    y: OY,
+    width: PARK_W,
+    height: MOTO_D,
+    name: "Motos 3,00 m",
+    showDimensions: true,
+  });
+
+  // 8 car bays 2.80 × 5.00
+  const BAY_W = m(2.8);
+  const BAY_D = m(5);
+  const bayX = OX + LOT_W - BAY_D - m(0.15);
+  const bayY0 = OY + MOTO_D;
+  for (let i = 0; i < 8; i++) {
+    add("floor", {
+      x: bayX,
+      y: bayY0 + i * BAY_W,
+      width: BAY_D,
+      height: BAY_W,
+      name: "Vaga " + (i + 1) + " (2,80×5,00)",
+      showDimensions: i === 0,
+    });
+  }
+
+  // --- Four apartments + central stair ---
+  const groups: Group[] = [];
+
+  /**
+   * Stamp one apartment from a single template.
+   * Same rooms, fixtures, doors, windows, and relative sizes on every apt.
+   * Only world origin (ax, ay) and group id/name differ.
+   */
+  function buildApartment(ax: number, ay: number, aptNum: number): void {
+    const groupId = "apt-" + aptNum;
+    groups.push({ id: groupId, name: "Apto " + aptNum, collapsed: false });
+    const g = { groupId };
+    const openY = ay + TOP_H;
+
+    // Rooms
+    add("floor", {
+      x: ax,
+      y: ay,
+      width: LEFT_W,
+      height: TOP_H,
+      name: "Banho",
+      ...g,
+    });
+    add("floor", {
+      x: ax + LEFT_W,
+      y: ay,
+      width: RIGHT_W,
+      height: TOP_H,
+      name: "Quarto",
+      ...g,
+    });
+    add("floor", {
+      x: ax,
+      y: openY,
+      width: COZ_W,
+      height: BOT_H,
+      name: "Cozinha",
+      ...g,
+    });
+    add("floor", {
+      x: ax + COZ_W,
+      y: openY,
+      width: BLDG_W - COZ_W,
+      height: BOT_H,
+      name: "Sala Estar",
+      ...g,
+    });
 
     /*
-     * Strict 6.00 × 6.00 m room grid (must sum exactly on both axes):
-     *
-     *   ┌─ 2.50 ─┬──── 3.50 ────┐
-     *   │ Banho  │ Quarto       │  2.50
-     *   ├────────┼──────────────┤
-     *   │Cozinha │ Sala Estar   │  3.50
-     *   └────────┴──────────────┘
-     *     2.50        3.50
-     *
-     *   2.50+3.50 = 6.00  (width and height)
-     *   Areas: 6.25 + 8.75 + 8.75 + 12.25 = 36.00 m²
+     * Banho 2.8 × 3.0
+     *   Box NW · Vaso NE mid · Pia/Tanque SW · door south center
      */
-    const BANHO_W = m(2.5);
-    const QUARTO_W = APT - BANHO_W; // 3.5
-    const TOP_H = m(2.5); // banho + quarto
-    const BOT_H = APT - TOP_H; // 3.5 cozinha + estar
-    const COZ_W = m(2.5); // same column as banho
-
-    // Terrain
-    add("terrain", {
-      x: OX,
-      y: OY,
-      width: LOT_W,
-      height: LOT_H,
-      name: "Lot 16×27 m",
-      showDimensions: true,
-    });
-
-    // Recuo lateral 1.50 m
     add("floor", {
-      x: OX,
-      y: OY,
-      width: SIDE,
-      height: BLDG_H,
-      name: "Recuo lateral 1,50 m",
+      x: ax + m(0.12),
+      y: ay + m(0.12),
+      width: m(1.6),
+      height: m(1.0),
+      name: "Box chuveiro",
+      ...g,
     });
-
-    // Front free strip
     add("floor", {
-      x: OX,
-      y: OY + BLDG_H,
-      width: LOT_W,
-      height: FRONT,
-      name: "Faixa frontal 3,00 m",
-      showDimensions: true,
+      x: ax + LEFT_W - m(0.45) - m(0.15),
+      y: ay + m(1.35),
+      width: m(0.45),
+      height: m(0.7),
+      rotation: 90,
+      name: "Vaso sanitário",
+      ...g,
     });
-
-    // Drive
     add("floor", {
-      x: PARK_X,
-      y: OY + MOTO_D,
-      width: PARK_W,
-      height: BLDG_H - MOTO_D,
-      name: "Circulação de veículos",
+      x: ax + m(0.12),
+      y: ay + TOP_H - m(1.2) - m(0.25),
+      width: m(0.55),
+      height: m(1.2),
+      labelRotation: 270,
+      name: "Pia / Tanque",
+      ...g,
     });
 
-    // Motos
-    add("floor", {
-      x: PARK_X,
-      y: OY,
-      width: PARK_W,
-      height: MOTO_D,
-      name: "Motos 3,00 m",
-      showDimensions: true,
-    });
-
-    // Car bays 2.80 × 5.00
-    const BAY_W = m(2.8);
-    const BAY_D = m(5);
-    const bayX = OX + LOT_W - BAY_D - m(0.15);
-    const bayY0 = OY + MOTO_D;
-    const bayCount = Math.min(8, Math.floor((BLDG_H - MOTO_D) / BAY_W));
-    for (let i = 0; i < bayCount; i++) {
-      add("floor", {
-        x: bayX,
-        y: bayY0 + i * BAY_W,
-        width: BAY_D,
-        height: BAY_W,
-        name: "Vaga " + (i + 1) + " (2,80×5,00)",
-        showDimensions: i === 0,
-      });
-    }
-
-    // --- Four identical 6×6 apartments (Apto 4 fundo → Apto 1 frente) ---
-    // One template: same rooms, fixtures, doors, windows, wall segments.
-    const groups: Group[] = [];
-
-    /**
-     * Build one apt at (ax, ay). Relative layout matches the approved plan:
-     * Banho 2.5×2.5 · Quarto 3.5×2.5 · Cozinha 2.5×3.5 · Estar 3.5×3.5
+    /*
+     * Cozinha 3.0 × 4.0 — work triangle + laundry
+     *   Armário N · Pia W · Fogão W · Bancada SW · Geladeira E · Máquina SE
      */
-    function buildApartment(ax: number, ay: number, aptNum: number, isFundo: boolean, isFrente: boolean): void {
-      const groupId = "apt-" + aptNum;
-      groups.push({ id: groupId, name: "Apto " + aptNum, collapsed: false });
-      const g = { groupId };
-      const openY = ay + TOP_H;
+    add("floor", {
+      x: ax + m(0.12),
+      y: openY + m(0.12),
+      width: m(1.8),
+      height: m(0.6),
+      name: "Armário",
+      ...g,
+    });
+    add("floor", {
+      x: ax + m(0.1),
+      y: openY + m(0.9),
+      width: m(0.6),
+      height: m(1.2),
+      labelRotation: 270,
+      name: "Pia",
+      ...g,
+    });
+    add("floor", {
+      x: ax + m(0.1),
+      y: openY + m(2.3),
+      width: m(0.6),
+      height: m(0.6),
+      name: "Fogão",
+      ...g,
+    });
+    add("floor", {
+      x: ax + m(0.1),
+      y: openY + m(3.05),
+      width: m(0.6),
+      height: m(0.8),
+      labelRotation: 270,
+      name: "Bancada",
+      ...g,
+    });
+    add("floor", {
+      x: ax + COZ_W - m(0.7) - m(0.15),
+      y: openY + m(1.5),
+      width: m(0.7),
+      height: m(0.7),
+      name: "Geladeira",
+      ...g,
+    });
+    // Máquina de lavar in the kitchen (laundry near sink / bancada)
+    add("floor", {
+      x: ax + COZ_W - m(0.6) - m(0.15),
+      y: openY + BOT_H - m(0.6) - m(0.2),
+      width: m(0.6),
+      height: m(0.6),
+      name: "Máquina de lavar",
+      ...g,
+    });
 
-      // Rooms (exact 6×6 grid)
-      add("floor", { x: ax, y: ay, width: BANHO_W, height: TOP_H, name: "Banho", ...g });
-      add("floor", {
-        x: ax + BANHO_W,
-        y: ay,
-        width: QUARTO_W,
-        height: TOP_H,
-        name: "Quarto",
-        ...g,
-      });
-      add("floor", {
-        x: ax,
-        y: openY,
-        width: COZ_W,
-        height: BOT_H,
-        name: "Cozinha",
-        ...g,
-      });
-      add("floor", {
-        x: ax + COZ_W,
-        y: openY,
-        width: APT - COZ_W,
-        height: BOT_H,
-        name: "Sala Estar",
-        ...g,
-      });
+    /*
+     * Quarto 4.40 × 3.00
+     *   Cama west · Roupeiro NE · Escrivaninha SE
+     */
+    add("floor", {
+      x: ax + LEFT_W + m(0.25),
+      y: ay + m(0.3),
+      width: m(1.4),
+      height: m(1.9),
+      name: "Cama",
+      ...g,
+    });
+    add("floor", {
+      x: ax + BLDG_W - m(1.8) - m(0.25),
+      y: ay + m(0.12),
+      width: m(1.8),
+      height: m(0.5),
+      name: "Roupeiro",
+      ...g,
+    });
+    // Desk under the east wall, south of the wardrobe (clear of bed)
+    add("floor", {
+      x: ax + BLDG_W - m(1.2) - m(0.2),
+      y: ay + m(1.0),
+      width: m(1.2),
+      height: m(0.55),
+      name: "Escrivaninha",
+      ...g,
+    });
 
-      // Envelope walls — one segment per apt (shared party wall separate)
-      add("wall", {
-        x: ax,
-        y: ay,
-        width: t,
-        height: APT,
-        name: "Parede oeste",
-        ...g,
-      });
-      add("wall", {
-        x: ax + APT - t,
-        y: ay,
-        width: t,
-        height: APT,
-        name: "Parede leste",
-        ...g,
-      });
-      if (isFundo) {
-        add("wall", {
-          x: ax,
-          y: ay,
-          width: APT,
-          height: t,
-          name: "Parede norte",
-          ...g,
-        });
-      }
-      if (isFrente) {
-        add("wall", {
-          x: ax,
-          y: ay + APT - t,
-          width: APT,
-          height: t,
-          name: "Parede sul",
-          ...g,
-        });
-      }
-
-      // Internal walls
-      add("wall", {
-        x: ax + BANHO_W - t / 2,
-        y: ay,
-        width: t,
-        height: TOP_H,
-        name: "Parede banho/quarto",
-        ...g,
-      });
-      add("wall", {
-        x: ax,
-        y: openY - t / 2,
-        width: APT,
-        height: t,
-        name: "Parede interna",
-        ...g,
-      });
-
-      /*
-       * Fixture layout — exact organization from approved apartment plan.
-       * Relative coords (m) from apt origin (ax, ay). Copied identically to every apt.
-       *
-       * Banho 2.5×2.5:
-       *   Box NW · Máquina NE · Pia/Tanque SW · Vaso mid-S · door on south wall
-       * Quarto 3.5×2.5:
-       *   Cama west · Roupeiro NE · door on south wall
-       * Cozinha 2.5×3.5:
-       *   Pia W · Fogão W · Armário SW · Geladeira SE (beside armário)
-       * Estar 3.5×3.5:
-       *   Mesa center-west · Sofá south · entrada east
-       */
-
-      // --- Banho ---
+    // Sala Estar
+    add("floor", {
+      x: ax + COZ_W - m(0.45),
+      y: openY + (BOT_H - m(1.4)) / 2,
+      width: m(0.9),
+      height: m(1.4),
+      name: "Mesa",
+      ...g,
+    });
+    {
+      const sofaL = m(1.8);
+      const sofaD = m(0.9);
+      const estarX = ax + COZ_W;
+      const estarW = BLDG_W - COZ_W;
       add("floor", {
-        x: ax + m(0.35),
-        y: ay + m(0.25),
-        width: m(1.3),
-        height: m(1.0),
-        name: "Box chuveiro",
-        ...g,
-      }); // 1.30 m²
-      add("floor", {
-        x: ax + m(1.75),
-        y: ay + m(0.25),
-        width: m(0.6),
-        height: m(0.6),
-        name: "Máquina de lavar",
-        ...g,
-      }); // 0.36 m²
-      add("floor", {
-        x: ax + m(0.25),
-        y: ay + m(1.35),
-        width: m(0.55),
-        height: m(1.0),
-        labelRotation: 270,
-        name: "Pia / Tanque",
-        ...g,
-      }); // 0.55 m²
-      // Vaso — just right of porta banho hinge (outside swing), 0.40 × 0.80
-      // Matches plan: door swing left into free floor; vaso on hinge side
-      add("floor", {
-        x: ax + m(1.9),
-        y: ay + TOP_H - m(0.8) - m(0.15),
-        width: m(0.4),
-        height: m(0.8),
-        name: "Vaso",
-        ...g,
-      }); // 0.32 m²
-
-      // --- Quarto ---
-      add("floor", {
-        x: ax + m(2.7),
-        y: ay + m(0.3),
-        width: m(1.4),
-        height: m(1.7),
-        name: "Cama",
-        ...g,
-      }); // 2.38 m² — ends x = ax+4.1
-      // Roupeiro 1.50 × 0.40 = 0.60 m² (top-right of quarto)
-      add("floor", {
-        x: ax + APT - m(1.5) - m(0.25),
-        y: ay + m(0.25),
-        width: m(1.5),
-        height: m(0.4),
-        name: "Roupeiro",
-        ...g,
-      });
-
-      // --- Cozinha (north clear for porta banho landing) ---
-      add("floor", {
-        x: ax + m(0.25),
-        y: openY + m(0.55),
-        width: m(0.6),
-        height: m(1.2),
-        labelRotation: 270,
-        name: "Pia",
-        ...g,
-      }); // 0.72 m²
-      add("floor", {
-        x: ax + m(0.25),
-        y: openY + m(1.95),
-        width: m(0.6),
-        height: m(0.6),
-        name: "Fogão",
-        ...g,
-      }); // 0.36 m²
-      // Armário + geladeira on south wall of kitchen (side by side)
-      add("floor", {
-        x: ax + m(0.25),
-        y: ay + APT - m(0.6) - m(0.25),
-        width: m(1.3),
-        height: m(0.6),
-        name: "Armário",
-        ...g,
-      }); // 0.78 m²
-      add("floor", {
-        x: ax + m(1.65),
-        y: ay + APT - m(0.7) - m(0.25),
-        width: m(0.7),
-        height: m(0.7),
-        name: "Geladeira",
-        ...g,
-      }); // 0.49 m²
-
-      // --- Sala Estar ---
-      // Mesa centered on cozinha | estar boundary
-      add("floor", {
-        x: ax + COZ_W - m(0.4),
-        y: openY + (BOT_H - m(1.2)) / 2,
-        width: m(0.8),
-        height: m(1.2),
-        name: "Mesa",
-        ...g,
-      }); // 0.96 m²
-      add("floor", {
-        x: ax + m(3.15),
-        y: ay + APT - m(0.9) - m(0.3),
-        width: m(1.8),
-        height: m(0.9),
+        x: estarX + (estarW - sofaL) / 2,
+        y: openY + BOT_H - sofaD - m(0.2),
+        width: sofaL,
+        height: sofaD,
         name: "Sofá",
         ...g,
-      }); // 1.62 m²
-
-      // --- Doors ---
-      // Porta banho 0.70 × wall — hinge right; swing up into banho (left of hinge)
-      add("door", {
-        x: ax + m(1.15),
-        y: openY - t / 2,
-        width: m(0.7),
-        height: t,
-        name: "Porta banho",
-        hinge: "end",
-        opens: "neg",
-        ...g,
-      }); // door ends ax+1.85; vaso starts ax+1.90
-      // Porta quarto — east of bed (bed ends ax+4.1)
-      add("door", {
-        x: ax + BANHO_W + m(2.15),
-        y: openY - t / 2,
-        width: m(0.8),
-        height: t,
-        name: "Porta quarto",
-        hinge: "end",
-        opens: "neg",
-        ...g,
-      });
-      add("door", {
-        x: ax + APT - t,
-        y: openY + m(1.1),
-        width: t,
-        height: DOOR_W,
-        name: "Entrada",
-        hinge: "start",
-        opens: "neg",
-        ...g,
-      });
-
-      // --- Windows ---
-      add("window", {
-        x: ax,
-        y: ay + m(0.6),
-        width: t,
-        height: m(0.8),
-        name: "Janela banho",
-        ...g,
-      });
-      add("window", {
-        x: ax,
-        y: openY + m(0.9),
-        width: t,
-        height: m(1.1),
-        name: "Janela cozinha",
-        ...g,
-      });
-      add("window", {
-        x: ax + APT - t,
-        y: openY + m(2.0),
-        width: t,
-        height: m(1.0),
-        name: "Janela estar",
-        ...g,
-      });
-      // Janela quarto — lower on east wall, clear of roupeiro (top)
-      add("window", {
-        x: ax + APT - t,
-        y: ay + m(1.25),
-        width: t,
-        height: m(1.0),
-        name: "Janela quarto",
-        ...g,
       });
     }
 
-    for (let a = 0; a < 4; a++) {
-      const ay = BY + a * APT;
-      const aptNum = 4 - a;
-      buildApartment(BX, ay, aptNum, a === 0, a === 3);
-      // Shared party wall between this apt and the one toward the front
-      if (a < 3) {
-        add("wall", {
-          x: BX,
-          y: ay + APT - t / 2,
-          width: APT,
-          height: t,
-          name: "Parede meação",
-        });
-      }
-    }
-
-    // --- Property perimeter fence ---
+    // Internal walls
     add("wall", {
-      x: OX,
-      y: OY,
-      width: LOT_W,
-      height: t,
-      name: "Muro fundo",
-    });
-    add("wall", {
-      x: OX,
-      y: OY,
+      x: ax + LEFT_W - t / 2,
+      y: ay,
       width: t,
-      height: LOT_H,
-      name: "Muro lateral",
+      height: TOP_H,
+      name: "Parede banho/quarto",
+      ...g,
     });
     add("wall", {
-      x: OX + LOT_W - t,
-      y: OY,
-      width: t,
-      height: LOT_H,
-      name: "Muro lateral",
+      x: ax,
+      y: openY - t / 2,
+      width: BLDG_W,
+      height: t,
+      name: "Parede interna",
+      ...g,
     });
-    /*
-     * Front fence (south): one small person gate + one vehicle gate.
-     * - Portão pedestre: narrow, on the left (home / building side)
-     * - Portão veículos: single leaf centered on the vehicle corridor
-     *   (aisle between building east face and parking bays)
-     */
-    const PED_W = m(0.9); // person gate ~90 cm
-    const VEH_W = m(3.5); // single car portão
-    // Vehicle corridor = strip between building east face and parking stalls
-    const aisleLeft = PARK_X;
-    const aisleRight = bayX;
-    const aisleMid = (aisleLeft + aisleRight) / 2;
-    // Small person portal on the left (home / building side of the front)
-    const pedX = BX + m(0.4);
-    // Vehicle portão centered on the drive aisle
-    const vehX = aisleMid - VEH_W / 2;
-    const frontY = OY + LOT_H - t;
-    const lotRight = OX + LOT_W;
 
-    // Muro left of ped gate (covers recuo + building front)
-    add("wall", {
-      x: OX,
-      y: frontY,
-      width: pedX - OX,
-      height: t,
-      name: "Muro frente",
-    });
-    // Small pedestrian portal (persons living on the lot)
+    // Doors
     add("door", {
-      x: pedX,
-      y: frontY,
-      width: PED_W,
+      x: ax + (LEFT_W - m(0.7)) / 2,
+      y: openY - t / 2,
+      width: m(0.7),
       height: t,
-      name: "Portão pedestre",
-      hinge: "start",
-      opens: "neg",
-    });
-    // Muro between ped and vehicle gates
-    add("wall", {
-      x: pedX + PED_W,
-      y: frontY,
-      width: vehX - (pedX + PED_W),
-      height: t,
-      name: "Muro frente",
-    });
-    // Single vehicle portão on the drive corridor
-    add("door", {
-      x: vehX,
-      y: frontY,
-      width: VEH_W,
-      height: t,
-      name: "Portão veículos",
+      name: "Porta banho",
       hinge: "end",
       opens: "neg",
+      ...g,
     });
-    // Muro right of vehicle gate to lot corner
-    add("wall", {
-      x: vehX + VEH_W,
-      y: frontY,
-      width: lotRight - (vehX + VEH_W),
+    add("door", {
+      x: ax + LEFT_W + m(2.7),
+      y: openY - t / 2,
+      width: m(0.8),
       height: t,
-      name: "Muro frente",
+      name: "Porta quarto",
+      hinge: "end",
+      opens: "neg",
+      ...g,
     });
-    add("wall", {
-      x: PARK_X,
-      y: OY + MOTO_D - t,
-      width: PARK_W,
-      height: t,
-      name: "Cobertura motos",
+    add("door", {
+      x: ax + BLDG_W - t,
+      y: openY + m(1.2),
+      width: t,
+      height: DOOR_W,
+      name: "Entrada",
+      hinge: "start",
+      opens: "neg",
+      ...g,
     });
 
-    return {
-      objects: objs,
-      groups: groups,
-      groupSeq: groups.length + 1,
-    };
+    // Windows
+    add("window", {
+      x: ax,
+      y: ay + m(0.9),
+      width: t,
+      height: m(0.9),
+      name: "Janela banho",
+      ...g,
+    });
+    add("window", {
+      x: ax,
+      y: openY + m(1.1),
+      width: t,
+      height: m(1.2),
+      name: "Janela cozinha",
+      ...g,
+    });
+    add("window", {
+      x: ax + BLDG_W - t,
+      y: openY + m(2.5),
+      width: t,
+      height: m(1.2),
+      name: "Janela estar",
+      ...g,
+    });
+    add("window", {
+      x: ax + BLDG_W - t,
+      y: ay + m(0.8),
+      width: t,
+      height: m(1.1),
+      name: "Janela quarto",
+      ...g,
+    });
   }
+
+  /*
+   * Stack (N → S): Apto 4 | Apto 3 | Escada 2.00 m | Apto 2 | Apto 1
+   */
+  const stairY = BY + 2 * APT_H;
+  const aptOrigins: { ay: number; num: number }[] = [
+    { ay: BY, num: 4 },
+    { ay: BY + APT_H, num: 3 },
+    { ay: stairY + STAIR_H, num: 2 },
+    { ay: stairY + STAIR_H + APT_H, num: 1 },
+  ];
+
+  for (const a of aptOrigins) {
+    buildApartment(BX, a.ay, a.num);
+  }
+
+  // Party walls between apt pairs (shared structure, not in apt groups)
+  add("wall", {
+    x: BX,
+    y: BY + APT_H - t / 2,
+    width: BLDG_W,
+    height: t,
+    name: "Parede meação",
+  });
+  add("wall", {
+    x: BX,
+    y: stairY - t / 2,
+    width: BLDG_W,
+    height: t,
+    name: "Parede escada N",
+  });
+  add("wall", {
+    x: BX,
+    y: stairY + STAIR_H - t / 2,
+    width: BLDG_W,
+    height: t,
+    name: "Parede escada S",
+  });
+  add("wall", {
+    x: BX,
+    y: stairY + STAIR_H + APT_H - t / 2,
+    width: BLDG_W,
+    height: t,
+    name: "Parede meação",
+  });
+
+  // --- Central stair core ---
+  groups.push({ id: "stair", name: "Escada", collapsed: false });
+  const sg = { groupId: "stair" };
+
+  add("floor", {
+    x: BX,
+    y: stairY,
+    width: BLDG_W,
+    height: STAIR_H,
+    name: "Escada 2,00 m",
+    showDimensions: true,
+    ...sg,
+  });
+
+  const LANDING_W = m(1.2);
+  const FLIGHT_W = BLDG_W - LANDING_W;
+  add("floor", {
+    x: BX + LANDING_W,
+    y: stairY + m(0.15),
+    width: FLIGHT_W - t,
+    height: m(0.85),
+    name: "Lance 1",
+    ...sg,
+  });
+  add("floor", {
+    x: BX + LANDING_W,
+    y: stairY + STAIR_H - m(0.15) - m(0.85),
+    width: FLIGHT_W - t,
+    height: m(0.85),
+    name: "Lance 2",
+    ...sg,
+  });
+  add("floor", {
+    x: BX + m(0.15),
+    y: stairY + m(0.15),
+    width: LANDING_W - m(0.3),
+    height: STAIR_H - m(0.3),
+    name: "Patamar",
+    ...sg,
+  });
+
+  add("wall", {
+    x: BX,
+    y: stairY,
+    width: t,
+    height: STAIR_H,
+    name: "Parede oeste escada",
+    ...sg,
+  });
+  const stairDoorY = stairY + (STAIR_H - DOOR_W) / 2;
+  add("wall", {
+    x: BX + BLDG_W - t,
+    y: stairY,
+    width: t,
+    height: stairDoorY - stairY,
+    name: "Parede leste escada",
+    ...sg,
+  });
+  add("wall", {
+    x: BX + BLDG_W - t,
+    y: stairDoorY + DOOR_W,
+    width: t,
+    height: stairY + STAIR_H - (stairDoorY + DOOR_W),
+    name: "Parede leste escada",
+    ...sg,
+  });
+  add("door", {
+    x: BX + BLDG_W - t,
+    y: stairDoorY,
+    width: t,
+    height: DOOR_W,
+    name: "Acesso escada",
+    hinge: "start",
+    opens: "neg",
+    ...sg,
+  });
+
+  // --- Building envelope ---
+  add("wall", {
+    x: BX,
+    y: BY,
+    width: BLDG_W,
+    height: t,
+    name: "Parede norte",
+  });
+  add("wall", {
+    x: BX,
+    y: BY + BLDG_H - t,
+    width: BLDG_W,
+    height: t,
+    name: "Parede sul",
+  });
+  add("wall", {
+    x: BX,
+    y: BY,
+    width: t,
+    height: BLDG_H,
+    name: "Parede oeste",
+  });
+  add("wall", {
+    x: BX + BLDG_W - t,
+    y: BY,
+    width: t,
+    height: BLDG_H,
+    name: "Parede leste",
+  });
+
+  // --- Property perimeter fence ---
+  add("wall", {
+    x: OX,
+    y: OY,
+    width: LOT_W,
+    height: t,
+    name: "Muro fundo",
+  });
+  add("wall", {
+    x: OX,
+    y: OY,
+    width: t,
+    height: LOT_H,
+    name: "Muro lateral",
+  });
+  add("wall", {
+    x: OX + LOT_W - t,
+    y: OY,
+    width: t,
+    height: LOT_H,
+    name: "Muro lateral",
+  });
+
+  // Front: small ped gate on building side + vehicle gate on drive aisle
+  const PED_W = m(0.9);
+  const VEH_W = m(3.5);
+  const aisleLeft = PARK_X;
+  const aisleRight = bayX;
+  const aisleMid = (aisleLeft + aisleRight) / 2;
+  const pedX = BX + m(0.4);
+  const vehX = aisleMid - VEH_W / 2;
+  const frontY = OY + LOT_H - t;
+  const lotRight = OX + LOT_W;
+
+  add("wall", {
+    x: OX,
+    y: frontY,
+    width: pedX - OX,
+    height: t,
+    name: "Muro frente",
+  });
+  add("door", {
+    x: pedX,
+    y: frontY,
+    width: PED_W,
+    height: t,
+    name: "Portão pedestre",
+    hinge: "start",
+    opens: "neg",
+  });
+  add("wall", {
+    x: pedX + PED_W,
+    y: frontY,
+    width: vehX - (pedX + PED_W),
+    height: t,
+    name: "Muro frente",
+  });
+  add("door", {
+    x: vehX,
+    y: frontY,
+    width: VEH_W,
+    height: t,
+    name: "Portão veículos",
+    hinge: "end",
+    opens: "neg",
+  });
+  add("wall", {
+    x: vehX + VEH_W,
+    y: frontY,
+    width: lotRight - (vehX + VEH_W),
+    height: t,
+    name: "Muro frente",
+  });
+  add("wall", {
+    x: PARK_X,
+    y: OY + MOTO_D - t,
+    width: PARK_W,
+    height: t,
+    name: "Cobertura motos",
+  });
+
+  return {
+    objects: objs,
+    groups: groups,
+    groupSeq: groups.length + 1,
+  };
+}
