@@ -7,3 +7,6 @@ package-lock.json
 # Local Playwright / design screenshots (not product assets)
 *.png
 !docs/**/*.png
+
+dist/
+

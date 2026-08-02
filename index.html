@@ -4,15 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Floor Plan Editor</title>
-    <link rel="stylesheet" href="css/styles.css?v=39" />
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.27/dist/interact.min.js"></script>
-  </head>
+      </head>
   <body>
     <div
       id="app"
       class="app"
-      x-data="floorPlanApp()"
+      x-data="floorPlanApp"
       x-init="init()"
       @keydown.window="onKeydown($event)"
     >
@@ -831,9 +828,8 @@
       ></div>
     </div>
 
-    <script src="js/components.js?v=56"></script>
-    <script src="js/snap.js?v=56"></script>
-    <script src="js/interact-setup.js?v=56"></script>
-    <script src="js/app.js?v=56"></script>
+
+
+      <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

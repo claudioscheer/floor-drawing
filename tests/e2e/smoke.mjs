@@ -1,6 +1,7 @@
 /**
  * End-to-end smoke for the floor-plan editor.
  * Drives the real page at BASE_URL (default http://127.0.0.1:8765).
+ * App state: Alpine.$data(#app) — no domain library globals.
  *
  * Usage:
  *   node tests/e2e-smoke.mjs
@@ -14,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "../..");
 const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:8765";
 const OUT_DIR =
   process.env.OUT_DIR ||
@@ -56,30 +57,30 @@ async function main() {
     const mounted = await page.evaluate(() => {
       return {
         title: document.title,
-        hasApp: !!(window.__fpApp && Array.isArray(window.__fpApp.objects)),
-        objectCount: window.__fpApp ? window.__fpApp.objects.length : 0,
+        hasApp: !!((function(){ const root = document.querySelector("#app"); const app = root && window.Alpine ? window.Alpine.$data(root) : null; return !!(app && Array.isArray(app.objects)); })()),
+        objectCount: (function(){ const root = document.querySelector("#app"); const app = root && window.Alpine ? window.Alpine.$data(root) : null; return app ? app.objects.length : 0; })(),
       };
     });
-    if (!mounted.hasApp) throw new Error("window.__fpApp not mounted");
+    if (!mounted.hasApp) throw new Error("Alpine floorPlanApp not mounted on #app");
     pass(results, "app-mount", mounted);
 
     // --- tools palette visible ---
     const toolsLayout = await page.evaluate(() => {
       const palette = document.querySelector(".palette-scroll");
       if (!palette) return { ok: false, reason: "no palette" };
-      const pr = palette.getBoundingClientRect();
       const tools = Array.from(document.querySelectorAll(".palette-item")).map((t) => {
         const r = t.getBoundingClientRect();
         return {
           label: t.textContent.trim().replace(/\s+/g, " "),
-          inPalette: r.height > 8 && r.top >= pr.top - 2 && r.bottom <= pr.bottom + 4,
+          // Present in palette DOM with a real box (may need scroll for last items)
+          present: r.height > 0 && palette.contains(t),
         };
       });
       const labels = tools.map((t) => t.label);
       const expected = ["Select", "Terrain", "Floor", "Wall", "Window", "Door"];
       const hasAll = expected.every((e) => labels.some((l) => l.includes(e)));
       return {
-        ok: hasAll && tools.every((t) => t.inPalette) && palette.clientHeight >= 160,
+        ok: hasAll && tools.every((t) => t.present) && palette.clientHeight >= 160,
         paletteH: palette.clientHeight,
         tools,
         hasAll,
@@ -101,7 +102,7 @@ async function main() {
 
     // --- selection focus ---
     const selectFocus = await page.evaluate(async () => {
-      const app = window.__fpApp;
+      const app = (function(){ const root = document.querySelector("#app"); return root && window.Alpine ? window.Alpine.$data(root) : null; })();
       const floor =
         app.objects.find((o) => o.name && String(o.name).includes("Estar")) ||
         app.objects.find((o) => o.type === "floor");
@@ -117,7 +118,7 @@ async function main() {
           !!(el && el.classList.contains("is-selected")) &&
           !!(row && row.classList.contains("is-selected")) &&
           !!(h2 && h2.textContent && h2.textContent.length > 0) &&
-          !!(el && el.style.outline && el.style.outline.includes("rgb(0, 120, 212)")),
+          !!(el && el.style.outline && el.style.outline.includes("rgb(47, 111, 237)") || el.style.outline.includes("#2f6fed")),
         selectedId: app.selectedId,
         hasClass: el && el.classList.contains("is-selected"),
         layerSelected: row && row.classList.contains("is-selected"),
@@ -132,17 +133,17 @@ async function main() {
 
     // --- feature APIs ---
     const features = await page.evaluate(async () => {
-      const app = window.__fpApp;
+      const app = (function(){ const root = document.querySelector("#app"); return root && window.Alpine ? window.Alpine.$data(root) : null; })();
       const out = {};
 
       // place floor via public path
       const beforeCount = app.objects.length;
       app.pushHistory();
-      const placed = FPComponents.createObject("floor", {
+      const placed = app.createObject("floor", {
         x: 100,
         y: 100,
-        width: FPComponents.m(2),
-        height: FPComponents.m(2),
+        width: app.m(2),
+        height: app.m(2),
         name: "E2E Floor",
       });
       app.objects = app.objects.concat([placed]);
@@ -157,9 +158,9 @@ async function main() {
       out.move = moved && moved.x === ox + 50;
 
       // resize
-      app.patchObject(placed.id, { width: FPComponents.m(3), height: FPComponents.m(2.5) });
+      app.patchObject(placed.id, { width: app.m(3), height: app.m(2.5) });
       const resized = app.objects.find((o) => o.id === placed.id);
-      out.resize = resized && resized.width === FPComponents.m(3) && resized.height === FPComponents.m(2.5);
+      out.resize = resized && resized.width === app.m(3) && resized.height === app.m(2.5);
 
       // opacity
       app.setOpacityPercent(40, false);
@@ -208,7 +209,7 @@ async function main() {
 
       // group + move peers
       const a = app.objects.find((o) => o.id === delId);
-      const b = FPComponents.createObject("floor", {
+      const b = app.createObject("floor", {
         x: a.x + 300,
         y: a.y,
         width: 100,

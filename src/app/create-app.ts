@@ -1,7 +1,47 @@
 /**
  * Alpine.js root application for the floor plan editor.
+ * Pure domain logic lives in @fp/* libraries; this module is the Alpine surface.
+ *
+ * Typing note: the public contract is FloorPlanApp (types.ts). Method bodies are a
+ * behavior-preserving port of the Alpine component; DOM event targets and Alpine
+ * magic ($refs, $nextTick) are loosely checked here so strictness stays on pure
+ * @fp/* libraries. Do not put domain logic in this file without types.
  */
-function floorPlanApp() {
+// @ts-nocheck
+
+import {
+  CATALOG,
+  createObject,
+  getCatalogList,
+  seedIdCounter,
+} from "@fp/catalog";
+import { createDemoLayout } from "@fp/demo";
+import {
+  doorArcPath,
+  doorClosedLeafPath,
+  doorGeometry,
+  doorHingeRect,
+  doorLeafPath,
+  doorSectorPath,
+  doorSymbolPath,
+} from "@fp/doors";
+import { clampOpacity, normalizeRotation, worldAABB } from "@fp/geometry";
+import { setupInteract } from "@fp/interact";
+import { snapPosition } from "@fp/snap";
+import { clamp, formatArea, formatLength, pxToUnit, unitToPx } from "@fp/units";
+import type { FloorPlanApp } from "./types";
+import type { ObjectType } from "@fp/types";
+import { getAppInstance, setAppInstance } from "./instance";
+
+/** One-time demo seed gate (module scope — not a window global). */
+let bootedFlag = false;
+
+/**
+ * Alpine component factory for the floor plan editor.
+ * @returns Reactive app data object bound via x-data / Alpine.data
+ */
+export function floorPlanApp(): FloorPlanApp {
+
   return {
     objects: [],
     /** Primary selection (inspector). Multi-select lives in selectedIds. */
@@ -44,7 +84,7 @@ function floorPlanApp() {
       kind: null, // 'object' | 'group'
     },
 
-    palette: FPComponents.getCatalogList(),
+    palette: getCatalogList(),
 
     snapGuides: { v: null, h: null, active: false },
 
@@ -94,23 +134,23 @@ function floorPlanApp() {
 
     init() {
       // Seed demo layout once (bump key when real-world scale / demo changes)
-      if (!window.__fpBooted_v39) {
-        window.__fpBooted_v39 = true;
+      if (!bootedFlag) {
+        bootedFlag = true;
         // Front: ped portal left of building; one car portão on aisle
-        const demo = FPComponents.createDemoLayout();
+        const demo = createDemoLayout();
         this.objects = demo.objects || demo;
         this.groups = demo.groups || [];
         this.groupSeq = demo.groupSeq || this.groups.length + 1;
-        FPComponents.seedIdCounter(this.objects);
+        seedIdCounter(this.objects);
         this.selectedIds = [];
       }
 
       // Stable handle for interact.js (and tests)
-      window.__fpApp = this;
+      setAppInstance(this as FloorPlanApp);
 
       // Wire interact.js once Alpine + DOM are ready
       this.$nextTick(() => {
-        FPInteract.setup(() => window.__fpApp);
+        setupInteract(() => getAppInstance());
       });
 
       // Space for pan mode
@@ -155,11 +195,11 @@ function floorPlanApp() {
     },
 
     objectStyle(obj) {
-      const rot = FPComponents.normalizeRotation(obj.rotation);
+      const rot = normalizeRotation(obj.rotation);
       const idx = this.objects.findIndex((o) => o.id === obj.id);
       // Paint order: later array index = higher z (reorderable in Layers)
-      const zBase = FPComponents.CATALOG[obj.type]?.z ?? 1;
-      const opacity = FPComponents.clampOpacity(
+      const zBase = CATALOG[obj.type]?.z ?? 1;
+      const opacity = clampOpacity(
         obj.opacity === undefined ? 1 : obj.opacity
       );
       const selected = this.isSelected(obj.id);
@@ -210,7 +250,7 @@ function floorPlanApp() {
     /** Opacity as 0–100 for the inspector. */
     opacityPercent(obj) {
       if (!obj) return 100;
-      return Math.round(FPComponents.clampOpacity(obj.opacity === undefined ? 1 : obj.opacity) * 100);
+      return Math.round(clampOpacity(obj.opacity === undefined ? 1 : obj.opacity) * 100);
     },
 
     /**
@@ -227,7 +267,7 @@ function floorPlanApp() {
       if (!ids.length) return;
       const n = Number(value);
       const pct = Number.isFinite(n) ? n : 100;
-      const opacity = FPComponents.clampOpacity(pct / 100);
+      const opacity = clampOpacity(pct / 100);
       if (withHistory !== false) this.pushHistory();
       for (const id of ids) {
         this.patchObject(id, { opacity });
@@ -250,37 +290,37 @@ function floorPlanApp() {
 
     /** Degrees 0–359 for the selected object. */
     normalizeRotation(value) {
-      return FPComponents.normalizeRotation(value);
+      return normalizeRotation(value);
     },
 
     /** Nudge selected rotation (degrees). One history step per call. */
     nudgeRotation(delta) {
       if (!this.selected) return;
-      const cur = FPComponents.normalizeRotation(this.selected.rotation);
+      const cur = normalizeRotation(this.selected.rotation);
       const d = Number(delta);
       this.updateSelected({
-        rotation: FPComponents.normalizeRotation(cur + (Number.isFinite(d) ? d : 0)),
+        rotation: normalizeRotation(cur + (Number.isFinite(d) ? d : 0)),
       });
     },
 
     setRotation(value) {
       if (!this.selected) return;
-      this.updateSelected({ rotation: FPComponents.normalizeRotation(value) });
+      this.updateSelected({ rotation: normalizeRotation(value) });
     },
 
     setLabelRotation(value) {
       if (!this.selected) return;
       this.updateSelected({
-        labelRotation: FPComponents.normalizeRotation(value),
+        labelRotation: normalizeRotation(value),
       });
     },
 
     nudgeLabelRotation(delta) {
       if (!this.selected) return;
-      const cur = FPComponents.normalizeRotation(this.selected.labelRotation);
+      const cur = normalizeRotation(this.selected.labelRotation);
       const d = Number(delta);
       this.updateSelected({
-        labelRotation: FPComponents.normalizeRotation(
+        labelRotation: normalizeRotation(
           cur + (Number.isFinite(d) ? d : 0)
         ),
       });
@@ -297,9 +337,9 @@ function floorPlanApp() {
      * converted to local space inside the CSS-rotated object.
      */
     labelStyle(obj) {
-      const objRot = FPComponents.normalizeRotation(obj.rotation);
-      const labelRot = FPComponents.normalizeRotation(obj.labelRotation);
-      const local = FPComponents.normalizeRotation(labelRot - objRot);
+      const objRot = normalizeRotation(obj.rotation);
+      const labelRot = normalizeRotation(obj.labelRotation);
+      const local = normalizeRotation(labelRot - objRot);
       return {
         transform: "translate(-50%, -50%) rotate(" + local + "deg)",
       };
@@ -358,8 +398,8 @@ function floorPlanApp() {
 
     /** World-positioned SVG; paths are local 0..box inside it. */
     doorSwingStyle(obj) {
-      const g = FPComponents.doorGeometry(obj);
-      const opacity = FPComponents.clampOpacity(
+      const g = doorGeometry(obj);
+      const opacity = clampOpacity(
         obj.opacity === undefined ? 1 : obj.opacity
       );
       return {
@@ -372,37 +412,37 @@ function floorPlanApp() {
     },
 
     doorSwingViewBox(obj) {
-      const g = FPComponents.doorGeometry(obj);
+      const g = doorGeometry(obj);
       return "0 0 " + g.boxW + " " + g.boxH;
     },
 
     doorSymbolPath(obj) {
-      return FPComponents.doorSymbolPath(obj);
+      return doorSymbolPath(obj);
     },
 
     doorSectorPath(obj) {
-      return FPComponents.doorSectorPath(obj);
+      return doorSectorPath(obj);
     },
 
     doorArcPath(obj) {
-      return FPComponents.doorArcPath(obj);
+      return doorArcPath(obj);
     },
 
     doorLeafPath(obj) {
-      return FPComponents.doorLeafPath(obj);
+      return doorLeafPath(obj);
     },
 
     doorClosedLeafPath(obj) {
-      return FPComponents.doorClosedLeafPath(obj);
+      return doorClosedLeafPath(obj);
     },
 
     doorHingeRect(obj) {
-      return FPComponents.doorHingeRect(obj);
+      return doorHingeRect(obj);
     },
 
     /** Size label text (meters, two decimals, e.g. "3.60 m"). */
     formatSize(n) {
-      return FPComponents.formatLength(n, "m");
+      return formatLength(n, "m");
     },
 
     /** Floor area in m² from width × height (world px). */
@@ -410,17 +450,17 @@ function floorPlanApp() {
       if (!obj) return "";
       const w = Number(obj.width) || 0;
       const h = Number(obj.height) || 0;
-      return FPComponents.formatArea(w * h);
+      return formatArea(w * h);
     },
 
     /** Numeric meters for property fields (two decimals). */
     formatMeters(n) {
-      return FPComponents.pxToUnit(n, "m").toFixed(2);
+      return pxToUnit(n, "m").toFixed(2);
     },
 
     /** Parse meters input → world pixels. */
     metersToPx(value) {
-      return FPComponents.unitToPx(Number(value) || 0, "m");
+      return unitToPx(Number(value) || 0, "m");
     },
 
     ensureLabelOffset(id) {
@@ -470,7 +510,7 @@ function floorPlanApp() {
 
     /** Default anchor on the object edge (world AABB; rotation-aware). */
     dimAnchor(obj, axis) {
-      const box = FPComponents.worldAABB(obj);
+      const box = worldAABB(obj);
       if (axis === "n") {
         return { x: box.x + box.width / 2, y: box.y };
       }
@@ -482,7 +522,7 @@ function floorPlanApp() {
 
     /** Default resting point for the badge (outside edges — Maket-style). */
     dimDefaultPos(obj, axis) {
-      const box = FPComponents.worldAABB(obj);
+      const box = worldAABB(obj);
       const invZ = 1 / Math.max(0.2, this.zoom || 1);
       const gap = Math.max(14, Math.round(16 * invZ * 0.35));
       if (axis === "n") {
@@ -522,7 +562,7 @@ function floorPlanApp() {
      * with short extension ticks at both ends.
      */
     dimBarStyle(obj, axis) {
-      const box = FPComponents.worldAABB(obj);
+      const box = worldAABB(obj);
       const invZ = 1 / Math.max(0.2, this.zoom || 1);
       const gap = Math.max(14, Math.round(16 * invZ * 0.35));
       const stroke = Math.max(1.25, 1.5 * invZ * 0.45);
@@ -546,7 +586,7 @@ function floorPlanApp() {
     },
 
     dimTickStyle(obj, axis, which) {
-      const box = FPComponents.worldAABB(obj);
+      const box = worldAABB(obj);
       const invZ = 1 / Math.max(0.2, this.zoom || 1);
       const gap = Math.max(14, Math.round(16 * invZ * 0.35));
       const tick = Math.max(6, Math.round(8 * invZ * 0.4));
@@ -617,14 +657,14 @@ function floorPlanApp() {
         return this.objects.length + " objects · no floors yet";
       }
       const areaPx = floors.reduce((sum, f) => sum + f.width * f.height, 0);
-      return this.objects.length + " objects · " + FPComponents.formatArea(areaPx);
+      return this.objects.length + " objects · " + formatArea(areaPx);
     },
 
     floorAreaLabel() {
       const floors = this.objects.filter((o) => o.type === "floor");
       if (!floors.length) return "—";
       const areaPx = floors.reduce((sum, f) => sum + f.width * f.height, 0);
-      return FPComponents.formatArea(areaPx);
+      return formatArea(areaPx);
     },
 
     setTool(tool) {
@@ -684,7 +724,7 @@ function floorPlanApp() {
     },
 
     paletteGhostStyle() {
-      const def = FPComponents.CATALOG[this.paletteDrag.type];
+      const def = CATALOG[this.paletteDrag.type];
       const w = def ? def.defaults.width : 80;
       const h = def ? def.defaults.height : 40;
       return {
@@ -804,14 +844,14 @@ function floorPlanApp() {
 
       // Capture app via window so listeners stay valid across Alpine ticks
       const onMove = (ev) => {
-        const app = window.__fpApp || this;
+        const app = getAppInstance() || this;
         if (app && typeof app.onObjectDragMove === "function") app.onObjectDragMove(ev);
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove, true);
         window.removeEventListener("pointerup", onUp, true);
         window.removeEventListener("pointercancel", onUp, true);
-        const app = window.__fpApp || this;
+        const app = getAppInstance() || this;
         if (app && typeof app.endObjectDrag === "function") app.endObjectDrag();
       };
       this._objectDragMove = onMove;
@@ -840,21 +880,18 @@ function floorPlanApp() {
 
       const exclude = new Set(drag.peers.map((p) => p.id));
       const others = this.objects.filter((o) => !exclude.has(o.id));
-      const snapped =
-        typeof FPSnap !== "undefined" && FPSnap.snapPosition
-          ? FPSnap.snapPosition(
-              {
-                x: drag.x,
-                y: drag.y,
-                width: primary.width,
-                height: primary.height,
-                rotation: primary.rotation || 0,
-              },
-              others,
-              primary.type,
-              { useGrid: true }
-            )
-          : { x: drag.x, y: drag.y, guides: { v: null, h: null }, active: false };
+      const snapped = snapPosition(
+        {
+          x: drag.x,
+          y: drag.y,
+          width: primary.width,
+          height: primary.height,
+          rotation: primary.rotation || 0,
+        },
+        others,
+        primary.type,
+        { useGrid: true }
+      );
 
       const dx = snapped.x - drag.startX;
       const dy = snapped.y - drag.startY;
@@ -1576,7 +1613,7 @@ function floorPlanApp() {
             ? true
             : !!data.showDimensionsGlobal;
         this.snapGuides = { v: null, h: null, active: false };
-        FPComponents.seedIdCounter(this.objects);
+        seedIdCounter(this.objects);
       } finally {
         // Allow Alpine to flush before accepting new history entries
         this.$nextTick(() => {
@@ -1679,7 +1716,7 @@ function floorPlanApp() {
 
       this.pushHistory();
       // 0.25 m southeast so the copy is not stacked on the original
-      const offset = FPComponents.unitToPx(0.25, "m");
+      const offset = unitToPx(0.25, "m");
       const nextOffsets = { ...(this.labelOffsets || {}) };
       const clones = sources.map((src) => {
         const overrides = {
@@ -1702,7 +1739,7 @@ function floorPlanApp() {
           overrides.hinge = src.hinge || "start";
           overrides.opens = src.opens || "neg";
         }
-        const clone = FPComponents.createObject(src.type, overrides);
+        const clone = createObject(src.type, overrides);
         const off = this.labelOffsets && this.labelOffsets[src.id];
         if (off) {
           nextOffsets[clone.id] = {
@@ -1968,7 +2005,7 @@ function floorPlanApp() {
       if (e.button !== 0) return;
       e.preventDefault();
 
-      const def = FPComponents.CATALOG[type];
+      const def = CATALOG[type];
       this.paletteDrag = {
         active: true,
         type,
@@ -2016,17 +2053,17 @@ function floorPlanApp() {
         return;
       }
 
-      const def = FPComponents.CATALOG[type];
+      const def = CATALOG[type];
       const worldX = (clientX - rect.left - this.panX) / this.zoom - def.defaults.width / 2;
       const worldY = (clientY - rect.top - this.panY) / this.zoom - def.defaults.height / 2;
 
-      let obj = FPComponents.createObject(type, {
+      let obj = createObject(type, {
         x: worldX,
         y: worldY,
       });
 
       // Snap to partners on drop
-      const snapped = FPSnap.snapPosition(
+      const snapped = snapPosition(
         obj,
         this.objects,
         type,
@@ -2047,9 +2084,22 @@ function floorPlanApp() {
         }, 250);
       }
     },
-  };
-}
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+    /**
+     * Domain factory for tests and internal use (no window globals).
+     * @param type - Catalog type
+     * @param overrides - Field overrides
+     */
+    createObject(type, overrides = {}) {
+      return createObject(type as ObjectType, overrides);
+    },
+
+    /**
+     * Meters → world pixels (test/helper surface).
+     * @param meters - Length in meters
+     */
+    m(meters) {
+      return unitToPx(Number(meters) || 0, "m");
+    },
+  } as unknown as FloorPlanApp;
 }

@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@fp/types": ["./src/types/index.ts"],
+      "@fp/units": ["./src/units/index.ts"],
+      "@fp/geometry": ["./src/geometry/index.ts"],
+      "@fp/catalog": ["./src/catalog/index.ts"],
+      "@fp/doors": ["./src/doors/index.ts"],
+      "@fp/demo": ["./src/demo/index.ts"],
+      "@fp/snap": ["./src/snap/index.ts"],
+      "@fp/interact": ["./src/interact/index.ts"],
+      "@fp/app": ["./src/app/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vite.config.ts", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,17 +1,30 @@
 {
-  "name": "oarfish",
+  "name": "floor-drawing",
   "version": "1.0.0",
-  "description": "Light SaaS-style floor plan canvas built with **Alpine.js**, **interact.js**, and vanilla JS.",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
+  "description": "TypeScript floor plan editor (Alpine + interact.js)",
+  "type": "module",
+  "license": "ISC",
   "scripts": {
-    "test": "node tests/e2e-smoke.mjs",
-    "test:e2e": "node tests/e2e-smoke.mjs",
-    "serve": "python3 -m http.server 8765"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 8765 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "node tests/e2e/smoke.mjs",
+    "test:all": "vitest run && node tests/e2e/smoke.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "dependencies": {
+    "alpinejs": "^3.15.12",
+    "interactjs": "^1.10.28"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^30.0.1",
+    "playwright": "^1.62.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
 }
