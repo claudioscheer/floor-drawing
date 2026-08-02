@@ -38,16 +38,21 @@ function rect(
 describe("snap", () => {
   it("exposes default range and screen threshold", () => {
     expect(DEFAULT_RANGE).toBe(12);
-    expect(SNAP_SCREEN_PX).toBe(18);
+    expect(SNAP_SCREEN_PX).toBe(14);
   });
 
-  it("scales world range with zoom so screen pull stays stable", () => {
-    // zoomed out: larger world threshold
-    expect(snapRangeForZoom(0.22)).toBeGreaterThan(50);
-    // 1:1: ~18 cm
-    expect(snapRangeForZoom(1)).toBe(18);
-    // zoomed in: floor at SNAP_RANGE_MIN
-    expect(snapRangeForZoom(3)).toBe(8);
+  it("scales world range mildly with zoom (sqrt, capped)", () => {
+    // zoomed out: larger but not room-wide (max 36)
+    const far = snapRangeForZoom(0.22);
+    expect(far).toBeGreaterThan(20);
+    expect(far).toBeLessThanOrEqual(36);
+    // 1:1: base screen px
+    expect(snapRangeForZoom(1)).toBe(14);
+    // zoomed in: near min (14/sqrt(3) ≈ 8.08, floored by MIN only when smaller)
+    expect(snapRangeForZoom(3)).toBeCloseTo(14 / Math.sqrt(3), 5);
+    expect(snapRangeForZoom(4)).toBe(8);
+    // never exceeds cap even at min zoom
+    expect(snapRangeForZoom(0.15)).toBeLessThanOrEqual(36);
     expect(resolveSnapRange({ zoom: 0.5 })).toBe(snapRangeForZoom(0.5));
     expect(resolveSnapRange({ range: 24 })).toBe(24);
   });
@@ -122,23 +127,34 @@ describe("snap", () => {
     expect(result.x).toBe(100);
   });
 
-  it("uses zoom so a far-but-on-screen edge still catches when zoomed out", () => {
+  it("uses zoom so a slightly distant edge still catches when zoomed out", () => {
     const wall = rect({ type: "wall", x: 1000, y: 200, width: 20, height: 100 });
-    // Right edge 40 world px from wall left — outside range 12, inside zoomed-out range
-    const moving = { x: 1000 - 80 - 40, y: 500, width: 80, height: 60, rotation: 0 };
+    // 24 cm from wall — outside fixed range 12, inside zoomed-out sqrt range (~28 at z=0.25)
+    const moving = { x: 1000 - 80 - 24, y: 500, width: 80, height: 60, rotation: 0 };
     const noZoom = snapPosition(moving, [wall], "floor", {
       useGrid: false,
       range: 12,
     });
-    // Neither axis within 12 cm of a partner edge
     expect(noZoom.x).toBe(moving.x);
     expect(noZoom.active).toBe(false);
 
     const withZoom = snapPosition(moving, [wall], "floor", {
       useGrid: false,
-      zoom: 0.25, // world range = min(90, max(8, 18/0.25)) = 72
+      zoom: 0.25, // 14 / sqrt(0.25) = 28 cm
     });
     expect(withZoom.x).toBe(1000 - 80);
     expect(withZoom.active).toBe(true);
+  });
+
+  it("does not jump almost a meter when barely near an edge at min zoom", () => {
+    const wall = rect({ type: "wall", x: 1000, y: 200, width: 20, height: 100 });
+    // 50 cm away — beyond SNAP_RANGE_MAX (36) even at min zoom
+    const moving = { x: 1000 - 80 - 50, y: 500, width: 80, height: 60, rotation: 0 };
+    const result = snapPosition(moving, [wall], "floor", {
+      useGrid: false,
+      zoom: 0.15,
+    });
+    expect(result.x).toBe(moving.x);
+    expect(result.active).toBe(false);
   });
 });

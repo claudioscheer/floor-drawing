@@ -26,22 +26,29 @@ import { GRID, snapToGrid } from "@fp/units";
 export const DEFAULT_RANGE = 12;
 
 /**
- * Magnetic snap distance in **screen** pixels.
- * Converted to world units via zoom so a wall edge is easy to hit when
- * zoomed out, and still precise when zoomed in.
+ * Magnetic snap distance in **screen** pixels at zoom = 1.
+ * Scaled with a mild zoom curve (sqrt) so zoomed-out magnets grow, but not
+ * enough to yank objects across half a room.
  */
-export const SNAP_SCREEN_PX = 18;
+export const SNAP_SCREEN_PX = 14;
 
 /** Minimum world snap range (cm) when zoomed in hard. */
 export const SNAP_RANGE_MIN = 8;
 
-/** Maximum world snap range (cm) when zoomed far out. */
-export const SNAP_RANGE_MAX = 90;
+/**
+ * Maximum world snap range (cm) when zoomed far out.
+ * Kept tight so tiny drags at min zoom cannot jump ~1 m to a distant edge.
+ */
+export const SNAP_RANGE_MAX = 36;
 
 /**
  * Convert a screen-pixel snap threshold into world units for the current zoom.
+ *
+ * Uses `screenPx / sqrt(zoom)` instead of `/ zoom` so the pull grows when
+ * zoomed out (easier to catch edges) without becoming a room-wide magnet.
+ *
  * @param zoom - Canvas zoom (world → screen scale)
- * @param screenPx - Desired magnetic distance on screen (default {@link SNAP_SCREEN_PX})
+ * @param screenPx - Base screen threshold (default {@link SNAP_SCREEN_PX})
  * @returns World-pixel range, clamped to [{@link SNAP_RANGE_MIN}, {@link SNAP_RANGE_MAX}]
  */
 export function snapRangeForZoom(
@@ -50,7 +57,8 @@ export function snapRangeForZoom(
 ): number {
   const z = Number(zoom);
   const safeZ = Number.isFinite(z) && z > 0.05 ? z : 1;
-  const world = screenPx / safeZ;
+  // Milder than 1/z: at 0.22 → ~30 cm; at 1 → 14 cm; at 3 → floor to MIN
+  const world = screenPx / Math.sqrt(safeZ);
   return Math.min(SNAP_RANGE_MAX, Math.max(SNAP_RANGE_MIN, world));
 }
 

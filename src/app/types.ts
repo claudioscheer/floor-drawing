@@ -187,6 +187,8 @@ export interface FloorPlanApp extends AlpineMagic {
   zoomIn(): void;
   zoomOut(): void;
   setZoom(next: number, centerClientX?: number, centerClientY?: number): void;
+  contentBounds(): { x: number; y: number; width: number; height: number } | null;
+  fitToContent(): void;
   resetView(): void;
   onWheel(e: WheelEvent): void;
   onViewportPointerDown(e: PointerEvent): void;

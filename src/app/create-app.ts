@@ -148,9 +148,10 @@ export function floorPlanApp(): FloorPlanApp {
       // Stable handle for interact.js (and tests)
       setAppInstance(this as FloorPlanApp);
 
-      // Wire interact.js once Alpine + DOM are ready
+      // Wire interact.js once Alpine + DOM are ready; frame the demo plan
       this.$nextTick(() => {
         setupInteract(() => getAppInstance());
+        this.fitToContent();
       });
 
       // Space for pan mode
@@ -1888,10 +1889,69 @@ export function floorPlanApp(): FloorPlanApp {
       this.panY = cy - rect.top - worldY * z;
     },
 
+    /**
+     * Axis-aligned bounds of visible objects (world AABB, rotation-aware).
+     * @returns null when there is nothing to frame
+     */
+    contentBounds() {
+      const visible = this.objects.filter((o) => o && o.visible !== false);
+      if (!visible.length) return null;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const o of visible) {
+        const box = worldAABB(o);
+        minX = Math.min(minX, box.x);
+        minY = Math.min(minY, box.y);
+        maxX = Math.max(maxX, box.x + box.width);
+        maxY = Math.max(maxY, box.y + box.height);
+      }
+      if (!Number.isFinite(minX)) return null;
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    },
+
+    /**
+     * Zoom + pan so all visible objects fit in the viewport (with padding).
+     * Call after getting lost from zoom/pan, or on reset.
+     */
+    fitToContent() {
+      const bounds = this.contentBounds();
+      const viewport = this.$refs && this.$refs.viewport;
+      if (!bounds || !viewport) {
+        this.zoom = clamp(0.22, this.minZoom, this.maxZoom);
+        this.panX = 48;
+        this.panY = 16;
+        return;
+      }
+
+      const vr = viewport.getBoundingClientRect();
+      const pad = 48;
+      const vw = Math.max(80, vr.width - pad * 2);
+      const vh = Math.max(80, vr.height - pad * 2);
+      const bw = Math.max(1, bounds.width);
+      const bh = Math.max(1, bounds.height);
+
+      let z = Math.min(vw / bw, vh / bh);
+      z = clamp(z, this.minZoom, this.maxZoom);
+      // Prefer a clean step at or below the fitted zoom so chrome stays readable
+      const steps = this.zoomSteps || [];
+      let stepped = z;
+      for (const s of steps) {
+        if (s <= z + 0.001) stepped = s;
+      }
+      z = stepped;
+
+      const cx = bounds.x + bounds.width / 2;
+      const cy = bounds.y + bounds.height / 2;
+      this.zoom = z;
+      this.panX = vr.width / 2 - cx * z;
+      this.panY = vr.height / 2 - cy * z;
+    },
+
+    /** Frame the whole plan (fit content). Prefer this over a hard 100% zoom. */
     resetView() {
-      this.zoom = 1;
-      this.panX = 80;
-      this.panY = 60;
+      this.fitToContent();
     },
 
     /**
