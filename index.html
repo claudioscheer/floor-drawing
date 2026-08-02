@@ -279,6 +279,16 @@
       >
         <div class="structure-row structure-levels">
           <span class="structure-label">Level</span>
+          <button
+            type="button"
+            class="structure-help-btn"
+            :class="structureHelpKind === 'level' ? 'is-open' : ''"
+            @click.stop="toggleStructureHelp($event, 'level')"
+            aria-label="About levels"
+            title="About levels"
+          >
+            ?
+          </button>
           <div class="structure-tabs" role="tablist" aria-label="Building levels">
             <template x-for="level in levels" :key="level.id">
               <button
@@ -319,19 +329,19 @@
               Delete level
             </button>
           </div>
-          <button
-            type="button"
-            class="structure-help-btn"
-            :class="structureHelpKind === 'level' ? 'is-open' : ''"
-            @click.stop="toggleStructureHelp($event, 'level')"
-            aria-label="About levels"
-            title="About levels"
-          >
-            ?
-          </button>
         </div>
         <div class="structure-row structure-units">
           <span class="structure-label">Unit</span>
+          <button
+            type="button"
+            class="structure-help-btn"
+            :class="structureHelpKind === 'unit' ? 'is-open' : ''"
+            @click.stop="toggleStructureHelp($event, 'unit')"
+            aria-label="About units"
+            title="About units"
+          >
+            ?
+          </button>
           <div class="structure-tabs" role="tablist" aria-label="Units on this level">
             <button
               type="button"
@@ -389,16 +399,6 @@
             class="structure-drawing-into"
             x-text="'Drawing into: ' + activeUnitLabel()"
           ></span>
-          <button
-            type="button"
-            class="structure-help-btn"
-            :class="structureHelpKind === 'unit' ? 'is-open' : ''"
-            @click.stop="toggleStructureHelp($event, 'unit')"
-            aria-label="About units"
-            title="About units"
-          >
-            ?
-          </button>
         </div>
       </div>
 

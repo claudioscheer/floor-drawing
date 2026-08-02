@@ -244,7 +244,8 @@ button {
 
 .structure-label {
   flex-shrink: 0;
-  width: 40px;
+  width: auto;
+  min-width: 36px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -306,7 +307,7 @@ button {
 
 .structure-drawing-into {
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: auto;
   padding: 3px 8px;
   border-radius: 2px;
   border: 1px solid var(--accent-border);
@@ -316,17 +317,18 @@ button {
   font-weight: 700;
 }
 
+/* Small help control, sits immediately after LEVEL / UNIT labels */
 .structure-help-btn {
   flex-shrink: 0;
-  margin-left: auto;
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
+  margin: 0 6px 0 0;
   padding: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface-2);
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--text-faint);
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
