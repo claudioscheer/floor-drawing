@@ -11,6 +11,7 @@
 
 import type { DemoLayout, Group, ObjectType, PlanObject, PlanObjectOverrides } from "@fp/types";
 import { createObject, DOOR_W, WALL_T } from "@fp/catalog";
+import { createDefaultStructure } from "@fp/projects";
 import { m } from "@fp/units";
 
 /**
@@ -84,7 +85,7 @@ export function createDemoLayout(): DemoLayout {
   });
 
   // Side setback
-  add("floor", {
+  add("room", {
     x: OX,
     y: OY,
     width: SIDE,
@@ -93,7 +94,7 @@ export function createDemoLayout(): DemoLayout {
   });
 
   // Front free strip
-  add("floor", {
+  add("room", {
     x: OX,
     y: OY + BLDG_H,
     width: LOT_W,
@@ -103,7 +104,7 @@ export function createDemoLayout(): DemoLayout {
   });
 
   // Drive
-  add("floor", {
+  add("room", {
     x: PARK_X,
     y: OY + MOTO_D,
     width: PARK_W,
@@ -112,7 +113,7 @@ export function createDemoLayout(): DemoLayout {
   });
 
   // Motos
-  add("floor", {
+  add("room", {
     x: PARK_X,
     y: OY,
     width: PARK_W,
@@ -127,7 +128,7 @@ export function createDemoLayout(): DemoLayout {
   const bayX = OX + LOT_W - BAY_D - m(0.15);
   const bayY0 = OY + MOTO_D;
   for (let i = 0; i < 8; i++) {
-    add("floor", {
+    add("room", {
       x: bayX,
       y: bayY0 + i * BAY_W,
       width: BAY_D,
@@ -152,7 +153,7 @@ export function createDemoLayout(): DemoLayout {
     const openY = ay + TOP_H;
 
     // Rooms
-    add("floor", {
+    add("room", {
       x: ax,
       y: ay,
       width: LEFT_W,
@@ -160,7 +161,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Banho",
       ...g,
     });
-    add("floor", {
+    add("room", {
       x: ax + LEFT_W,
       y: ay,
       width: RIGHT_W,
@@ -168,7 +169,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Quarto",
       ...g,
     });
-    add("floor", {
+    add("room", {
       x: ax,
       y: openY,
       width: COZ_W,
@@ -176,7 +177,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Cozinha",
       ...g,
     });
-    add("floor", {
+    add("room", {
       x: ax + COZ_W,
       y: openY,
       width: BLDG_W - COZ_W,
@@ -189,7 +190,7 @@ export function createDemoLayout(): DemoLayout {
      * Banho 2.8 × 3.0
      *   Box NW · Vaso NE mid · Pia/Tanque SW · door south center
      */
-    add("floor", {
+    add("furniture", {
       x: ax + m(0.12),
       y: ay + m(0.12),
       width: m(1.6),
@@ -197,7 +198,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Box chuveiro",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + LEFT_W - m(0.45) - m(0.15),
       y: ay + m(1.35),
       width: m(0.45),
@@ -206,7 +207,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Vaso sanitário",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + m(0.12),
       y: ay + TOP_H - m(1.2) - m(0.25),
       width: m(0.55),
@@ -220,7 +221,7 @@ export function createDemoLayout(): DemoLayout {
      * Cozinha 3.0 × 4.0 — work triangle + laundry
      *   Armário N · Pia W · Fogão W · Bancada SW · Geladeira E · Máquina SE
      */
-    add("floor", {
+    add("furniture", {
       x: ax + m(0.12),
       y: openY + m(0.12),
       width: m(1.8),
@@ -228,7 +229,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Armário",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + m(0.1),
       y: openY + m(0.9),
       width: m(0.6),
@@ -237,7 +238,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Pia",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + m(0.1),
       y: openY + m(2.3),
       width: m(0.6),
@@ -245,7 +246,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Fogão",
       ...g,
     });
-    add("floor", {
+    add("room", {
       x: ax + m(0.1),
       y: openY + m(3.05),
       width: m(0.6),
@@ -254,7 +255,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Bancada",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + COZ_W - m(0.7) - m(0.15),
       y: openY + m(1.5),
       width: m(0.7),
@@ -263,7 +264,7 @@ export function createDemoLayout(): DemoLayout {
       ...g,
     });
     // Máquina de lavar in the kitchen (laundry near sink / bancada)
-    add("floor", {
+    add("furniture", {
       x: ax + COZ_W - m(0.6) - m(0.15),
       y: openY + BOT_H - m(0.6) - m(0.2),
       width: m(0.6),
@@ -276,7 +277,7 @@ export function createDemoLayout(): DemoLayout {
      * Quarto 4.40 × 3.00
      *   Cama west · Roupeiro NE · Escrivaninha SE
      */
-    add("floor", {
+    add("furniture", {
       x: ax + LEFT_W + m(0.25),
       y: ay + m(0.3),
       width: m(1.4),
@@ -284,7 +285,7 @@ export function createDemoLayout(): DemoLayout {
       name: "Cama",
       ...g,
     });
-    add("floor", {
+    add("furniture", {
       x: ax + BLDG_W - m(1.8) - m(0.25),
       y: ay + m(0.12),
       width: m(1.8),
@@ -293,7 +294,7 @@ export function createDemoLayout(): DemoLayout {
       ...g,
     });
     // Desk under the east wall, south of the wardrobe (clear of bed)
-    add("floor", {
+    add("room", {
       x: ax + BLDG_W - m(1.2) - m(0.2),
       y: ay + m(1.0),
       width: m(1.2),
@@ -303,7 +304,7 @@ export function createDemoLayout(): DemoLayout {
     });
 
     // Sala Estar
-    add("floor", {
+    add("furniture", {
       x: ax + COZ_W - m(0.45),
       y: openY + (BOT_H - m(1.4)) / 2,
       width: m(0.9),
@@ -316,7 +317,7 @@ export function createDemoLayout(): DemoLayout {
       const sofaD = m(0.9);
       const estarX = ax + COZ_W;
       const estarW = BLDG_W - COZ_W;
-      add("floor", {
+      add("furniture", {
         x: estarX + (estarW - sofaL) / 2,
         y: openY + BOT_H - sofaD - m(0.2),
         width: sofaL,
@@ -460,7 +461,7 @@ export function createDemoLayout(): DemoLayout {
   groups.push({ id: "stair", name: "Escada", collapsed: false });
   const sg = { groupId: "stair" };
 
-  add("floor", {
+  add("room", {
     x: BX,
     y: stairY,
     width: BLDG_W,
@@ -472,7 +473,7 @@ export function createDemoLayout(): DemoLayout {
 
   const LANDING_W = m(1.2);
   const FLIGHT_W = BLDG_W - LANDING_W;
-  add("floor", {
+  add("room", {
     x: BX + LANDING_W,
     y: stairY + m(0.15),
     width: FLIGHT_W - t,
@@ -480,7 +481,7 @@ export function createDemoLayout(): DemoLayout {
     name: "Lance 1",
     ...sg,
   });
-  add("floor", {
+  add("room", {
     x: BX + LANDING_W,
     y: stairY + STAIR_H - m(0.15) - m(0.85),
     width: FLIGHT_W - t,
@@ -488,7 +489,7 @@ export function createDemoLayout(): DemoLayout {
     name: "Lance 2",
     ...sg,
   });
-  add("floor", {
+  add("room", {
     x: BX + m(0.15),
     y: stairY + m(0.15),
     width: LANDING_W - m(0.3),
@@ -644,9 +645,24 @@ export function createDemoLayout(): DemoLayout {
     name: "Cobertura motos",
   });
 
+  const structure = createDefaultStructure();
+  const levelId = structure.levels[0].id;
+  // Lot / setbacks / parking / stairs-like site work → level-shared (no unit)
+  // Interior apt content stays on the default unit for now
+  const sharedName =
+    /lot|recuo|faixa|vaga|moto|circul|cobertura|portão|portal|escada|stair/i;
+  for (const o of objs) {
+    o.levelId = levelId;
+    o.unitId = sharedName.test(o.name || "") ? null : structure.units[0].id;
+  }
+
   return {
     objects: objs,
     groups: groups,
     groupSeq: groups.length + 1,
+    levels: structure.levels,
+    units: structure.units,
+    levelSeq: structure.levelSeq,
+    unitSeq: structure.unitSeq,
   };
 }

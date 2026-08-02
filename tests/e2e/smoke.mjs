@@ -125,7 +125,15 @@ async function main() {
         };
       });
       const labels = tools.map((t) => t.label);
-      const expected = ["Select", "Terrain", "Floor", "Wall", "Window", "Door"];
+      const expected = [
+        "Select",
+        "Terrain",
+        "Room",
+        "Furniture",
+        "Wall",
+        "Window",
+        "Door",
+      ];
       const hasAll = expected.every((e) => labels.some((l) => l.includes(e)));
       return {
         ok: hasAll && tools.every((t) => t.present) && palette.clientHeight >= 160,
@@ -151,7 +159,7 @@ async function main() {
     // --- selection focus (place a floor first; no demo seed on boot) ---
     const selectFocus = await page.evaluate(async () => {
       const app = (function(){ const root = document.querySelector("#app"); return root && window.Alpine ? window.Alpine.$data(root) : null; })();
-      const floor = app.createObject("floor", {
+      const floor = app.createObject("room", {
         x: 200,
         y: 200,
         width: app.m(4),
@@ -191,7 +199,7 @@ async function main() {
       // place floor via public path
       const beforeCount = app.objects.length;
       app.pushHistory();
-      const placed = app.createObject("floor", {
+      const placed = app.createObject("room", {
         x: 100,
         y: 100,
         width: app.m(2),
@@ -261,7 +269,7 @@ async function main() {
 
       // group + move peers
       const a = app.objects.find((o) => o.id === delId);
-      const b = app.createObject("floor", {
+      const b = app.createObject("room", {
         x: a.x + 300,
         y: a.y,
         width: 100,

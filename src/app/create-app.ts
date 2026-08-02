@@ -28,16 +28,20 @@ import { clampOpacity, normalizeRotation, worldAABB } from "@fp/geometry";
 import { setupInteract } from "@fp/interact";
 import {
   buildPlanDocument,
+  createDefaultStructure,
   createProject as apiCreateProject,
   deleteProject as apiDeleteProject,
   duplicateProject as apiDuplicateProject,
   getProject,
   listProjects,
+  nextLevelName,
+  nextUnitName,
   normalizePlanDocument,
   parseProjectIdFromPath,
   planDocumentToExport,
   PROJECTS_LIST_PATH,
   projectPath,
+  unitsOnLevel,
   updateProject,
 } from "@fp/projects";
 import { snapPosition } from "@fp/snap";
@@ -84,6 +88,15 @@ export function floorPlanApp(): FloorPlanApp {
     /** Named groups: { id, name, collapsed } */
     groups: [],
     groupSeq: 1,
+    /** Building stories (andares). */
+    levels: createDefaultStructure().levels,
+    /** Units on levels (house / apartment). */
+    units: createDefaultStructure().units,
+    levelSeq: 1,
+    unitSeq: 1,
+    activeLevelId: createDefaultStructure().levels[0].id,
+    /** null = shared on the level (not inside a unit). */
+    activeUnitId: null,
 
     zoom: 0.22,
     panX: 48,
@@ -92,7 +105,7 @@ export function floorPlanApp(): FloorPlanApp {
     maxZoom: 3,
 
     planName: "Untitled project",
-    /** select | pan | terrain | floor | wall | window | door */
+    /** select | pan | terrain | room | furniture | wall | window | door */
     activeTool: "select",
 
     /** layout = 2D editor; visualize = Three.js walkthrough */
@@ -135,6 +148,10 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     palette: getCatalogList(),
+    /** Fixed help card (panel overflow clips absolute tips). */
+    paletteHoverTip: null,
+    /** Which structure help popover is open: level | unit | null */
+    structureHelpKind: null,
 
     snapGuides: { v: null, h: null, active: false },
 
@@ -192,6 +209,13 @@ export function floorPlanApp(): FloorPlanApp {
         this.objects = [];
         this.groups = [];
         this.groupSeq = 1;
+        const structure = createDefaultStructure();
+        this.levels = structure.levels;
+        this.units = structure.units;
+        this.levelSeq = structure.levelSeq;
+        this.unitSeq = structure.unitSeq;
+        this.activeLevelId = structure.levels[0].id;
+        this.activeUnitId = null; // level-shared by default
         this.selectedIds = [];
         this.selectedId = null;
         void this.bootstrapFromUrl();
@@ -223,6 +247,24 @@ export function floorPlanApp(): FloorPlanApp {
       window.addEventListener("popstate", () => {
         void this.syncFromLocation();
       });
+
+      // Click outside closes structure help popovers
+      window.addEventListener(
+        "click",
+        (e) => {
+          if (!this.structureHelpKind) return;
+          const t = e.target;
+          if (
+            t &&
+            t.closest &&
+            (t.closest(".structure-help-btn") || t.closest(".palette-tip-fixed"))
+          ) {
+            return;
+          }
+          this.hideStructureHelp();
+        },
+        true
+      );
 
       // Flush pending save on tab close / refresh
       window.addEventListener("beforeunload", () => {
@@ -566,6 +608,10 @@ export function floorPlanApp(): FloorPlanApp {
         objects: this.objects,
         groups: this.groups,
         groupSeq: this.groupSeq,
+        levels: this.levels,
+        units: this.units,
+        levelSeq: this.levelSeq,
+        unitSeq: this.unitSeq,
         labelOffsets: this.labelOffsets,
         showDimensionsGlobal: this.showDimensionsGlobal,
         zoom: this.zoom,
@@ -585,6 +631,13 @@ export function floorPlanApp(): FloorPlanApp {
         this.objects = Array.isArray(data.objects) ? data.objects : [];
         this.groups = Array.isArray(data.groups) ? data.groups : [];
         this.groupSeq = Number(data.groupSeq) || 1;
+        this.levels = data.levels;
+        this.units = data.units;
+        this.levelSeq = data.levelSeq;
+        this.unitSeq = data.unitSeq;
+        this.activeLevelId = data.levels[0]?.id || null;
+        // Open on level-shared so terrain/stairs stay easy to edit
+        this.activeUnitId = null;
         this.labelOffsets =
           data.labelOffsets && typeof data.labelOffsets === "object"
             ? data.labelOffsets
@@ -602,6 +655,328 @@ export function floorPlanApp(): FloorPlanApp {
           this._historyPaused = false;
         });
       }
+    },
+
+    /**
+     * Objects on the active building level (all units on that story).
+     * @returns Filtered plan objects
+     */
+    visibleObjects() {
+      const lid = this.activeLevelId;
+      if (!lid) return this.objects;
+      return this.objects.filter((o) => o.levelId === lid);
+    },
+
+    /**
+     * Units on the active level.
+     * @returns Unit list
+     */
+    unitsForActiveLevel() {
+      return unitsOnLevel(this.units, this.activeLevelId || "");
+    },
+
+    /**
+     * Switch active story; pick first unit on that level.
+     * @param levelId - Level id
+     */
+    setActiveLevel(levelId) {
+      if (!levelId || levelId === this.activeLevelId) return;
+      const level = this.levels.find((l) => l.id === levelId);
+      if (!level) return;
+      this.activeLevelId = levelId;
+      // Stay on level-shared when switching stories (terrain / stairs)
+      this.activeUnitId = null;
+      this.clearSelection();
+      this.framePlanAfterShow();
+      if (this.viewMode === "visualize" && this._visualizer) {
+        this._visualizer.rebuild(this.visibleObjects());
+      }
+    },
+
+    /**
+     * Switch active unit for new placements, or null for level-shared.
+     * @param unitId - Unit id, or null for shared on the level
+     */
+    setActiveUnit(unitId) {
+      if (unitId === null || unitId === "") {
+        this.activeUnitId = null;
+        return;
+      }
+      const unit = this.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      if (unit.levelId !== this.activeLevelId) {
+        this.activeLevelId = unit.levelId;
+      }
+      this.activeUnitId = unitId;
+    },
+
+    /**
+     * Display name of where new draws go (unit or level-shared).
+     * @returns Label
+     */
+    activeUnitLabel() {
+      if (!this.activeUnitId) return "Level (shared)";
+      const u = this.units.find((x) => x.id === this.activeUnitId);
+      return u ? u.name : "Level (shared)";
+    },
+
+    /**
+     * Move the current selection into the active target on this level.
+     * Active unit → assign to that unit. Shared → clear unit (level only).
+     */
+    assignSelectionToActiveUnit() {
+      const levelId = this.activeLevelId;
+      if (!levelId) return;
+      const unitId = this.activeUnitId; // may be null = shared
+      if (unitId) {
+        const unit = this.units.find((u) => u.id === unitId);
+        if (!unit || unit.levelId !== levelId) return;
+      }
+
+      const ids =
+        this.selectedIds && this.selectedIds.length
+          ? this.selectedIds.slice()
+          : this.selectedId
+            ? [this.selectedId]
+            : [];
+      if (!ids.length) return;
+
+      const targets = ids
+        .map((id) => this.objects.find((o) => o.id === id))
+        .filter((o) => o && o.levelId === levelId);
+      if (!targets.length) return;
+
+      this.pushHistory();
+      for (const o of targets) {
+        o.unitId = unitId;
+        o.levelId = levelId;
+      }
+      this.scheduleSave();
+    },
+
+    /**
+     * Add a new story above the highest level.
+     */
+    addLevel() {
+      this.pushHistory();
+      this.levelSeq = (this.levelSeq || 0) + 1;
+      this.unitSeq = (this.unitSeq || 0) + 1;
+      const id = "level-" + this.levelSeq;
+      const order =
+        this.levels.reduce((m, l) => Math.max(m, l.order), -1) + 1;
+      const level = {
+        id,
+        name: nextLevelName(this.levels),
+        order,
+      };
+      const unitId = "unit-" + this.unitSeq;
+      const unit = { id: unitId, name: "Main", levelId: id };
+      this.levels = this.levels.concat([level]);
+      this.units = this.units.concat([unit]);
+      this.activeLevelId = id;
+      this.activeUnitId = null;
+      this.clearSelection();
+      this.scheduleSave();
+    },
+
+    /**
+     * Duplicate the active level (objects + units) as a new story.
+     */
+    duplicateActiveLevel() {
+      const srcId = this.activeLevelId;
+      if (!srcId) return;
+      const srcLevel = this.levels.find((l) => l.id === srcId);
+      if (!srcLevel) return;
+
+      this.pushHistory();
+      this.levelSeq = (this.levelSeq || 0) + 1;
+      const newLevelId = "level-" + this.levelSeq;
+      const newLevel = {
+        id: newLevelId,
+        name: nextLevelName(this.levels),
+        order: this.levels.reduce((m, l) => Math.max(m, l.order), -1) + 1,
+      };
+
+      const srcUnits = unitsOnLevel(this.units, srcId);
+      const unitMap = {};
+      const newUnits = srcUnits.map((u) => {
+        this.unitSeq = (this.unitSeq || 0) + 1;
+        const nid = "unit-" + this.unitSeq;
+        unitMap[u.id] = nid;
+        return {
+          id: nid,
+          name: u.name,
+          levelId: newLevelId,
+        };
+      });
+      if (!newUnits.length) {
+        this.unitSeq = (this.unitSeq || 0) + 1;
+        const nid = "unit-" + this.unitSeq;
+        newUnits.push({ id: nid, name: "Main", levelId: newLevelId });
+      }
+
+      const srcObjs = this.objects.filter((o) => o.levelId === srcId);
+      const nextOffsets = { ...(this.labelOffsets || {}) };
+      const clones = srcObjs.map((src) => {
+        const uid =
+          src.unitId == null || src.unitId === ""
+            ? null
+            : unitMap[src.unitId] || null;
+        const overrides = {
+          name: src.name,
+          notes: src.notes ?? "",
+          x: src.x,
+          y: src.y,
+          width: src.width,
+          height: src.height,
+          rotation: src.rotation,
+          labelRotation: src.labelRotation,
+          visible: src.visible !== false,
+          locked: !!src.locked,
+          groupId: null,
+          levelId: newLevelId,
+          unitId: uid,
+          opacity: src.opacity,
+          showDimensions: src.showDimensions !== false,
+        };
+        if (src.type === "door") {
+          overrides.hinge = src.hinge || "start";
+          overrides.opens = src.opens || "neg";
+        }
+        const clone = createObject(src.type, overrides);
+        const off = this.labelOffsets && this.labelOffsets[src.id];
+        if (off) {
+          nextOffsets[clone.id] = {
+            w: { x: off.w?.x || 0, y: off.w?.y || 0 },
+            h: { x: off.h?.x || 0, y: off.h?.y || 0 },
+            n: { x: (off.n && off.n.x) || 0, y: (off.n && off.n.y) || 0 },
+          };
+        }
+        return clone;
+      });
+
+      this.levels = this.levels.concat([newLevel]);
+      this.units = this.units.concat(newUnits);
+      this.objects = this.objects.concat(clones);
+      this.labelOffsets = nextOffsets;
+      this.activeLevelId = newLevelId;
+      this.activeUnitId = null;
+      this.clearSelection();
+      this.scheduleSave();
+      this.framePlanAfterShow();
+    },
+
+    /**
+     * Add a unit on the active level.
+     */
+    addUnit() {
+      const lid = this.activeLevelId;
+      if (!lid) return;
+      this.pushHistory();
+      this.unitSeq = (this.unitSeq || 0) + 1;
+      const id = "unit-" + this.unitSeq;
+      const onLevel = unitsOnLevel(this.units, lid);
+      const unit = {
+        id,
+        name: nextUnitName(onLevel),
+        levelId: lid,
+      };
+      this.units = this.units.concat([unit]);
+      this.activeUnitId = id;
+      this.scheduleSave();
+    },
+
+    /**
+     * Rename a level.
+     * @param levelId - Level id
+     * @param name - New name
+     */
+    renameLevel(levelId, name) {
+      const level = this.levels.find((l) => l.id === levelId);
+      if (!level) return;
+      const next = String(name || "").trim() || level.name;
+      if (next === level.name) return;
+      this.pushHistory();
+      level.name = next;
+      this.scheduleSave();
+    },
+
+    /**
+     * Rename a unit.
+     * @param unitId - Unit id
+     * @param name - New name
+     */
+    renameUnit(unitId, name) {
+      const unit = this.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      const next = String(name || "").trim() || unit.name;
+      if (next === unit.name) return;
+      this.pushHistory();
+      unit.name = next;
+      this.scheduleSave();
+    },
+
+    /**
+     * Delete a level (and its units/objects). Keeps at least one level.
+     * @param levelId - Level id
+     */
+    deleteLevel(levelId) {
+      if (this.levels.length <= 1) return;
+      const level = this.levels.find((l) => l.id === levelId);
+      if (!level) return;
+      if (
+        !window.confirm(
+          `Delete level “${level.name}” and everything on it? This cannot be undone from history after save.`
+        )
+      ) {
+        return;
+      }
+      this.pushHistory();
+      const unitIds = new Set(
+        this.units.filter((u) => u.levelId === levelId).map((u) => u.id)
+      );
+      this.objects = this.objects.filter((o) => o.levelId !== levelId);
+      this.units = this.units.filter((u) => u.levelId !== levelId);
+      this.levels = this.levels.filter((l) => l.id !== levelId);
+      if (this.activeLevelId === levelId) {
+        const next = this.levels[0];
+        this.activeLevelId = next?.id || null;
+        this.activeUnitId = null;
+      }
+      // Drop orphan label offsets
+      for (const id of unitIds) {
+        void id;
+      }
+      this.clearSelection();
+      this.scheduleSave();
+      this.framePlanAfterShow();
+    },
+
+    /**
+     * Delete a unit and its objects. Keeps at least one unit per level.
+     * @param unitId - Unit id
+     */
+    deleteUnit(unitId) {
+      const unit = this.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      const siblings = unitsOnLevel(this.units, unit.levelId);
+      if (siblings.length <= 1) return;
+      if (
+        !window.confirm(
+          `Delete unit “${unit.name}” and its objects?`
+        )
+      ) {
+        return;
+      }
+      this.pushHistory();
+      this.objects = this.objects.filter((o) => o.unitId !== unitId);
+      this.units = this.units.filter((u) => u.id !== unitId);
+      if (this.activeUnitId === unitId) {
+        const next = unitsOnLevel(this.units, unit.levelId)[0];
+        this.activeUnitId = next?.id || null;
+      }
+      this.clearSelection();
+      this.scheduleSave();
     },
 
     /** Label for the save-status chip. */
@@ -667,7 +1042,7 @@ export function floorPlanApp(): FloorPlanApp {
           },
         });
       }
-      this._visualizer.rebuild(this.objects);
+      this._visualizer.rebuild(this.visibleObjects());
       this._visualizer.start();
       this.vizLocked = this._visualizer.isLocked();
     },
@@ -707,9 +1082,19 @@ export function floorPlanApp(): FloorPlanApp {
       const idx = this.objects.findIndex((o) => o.id === obj.id);
       // Paint order: later array index = higher z (reorderable in Layers)
       const zBase = CATALOG[obj.type]?.z ?? 1;
-      const opacity = clampOpacity(
+      let opacity = clampOpacity(
         obj.opacity === undefined ? 1 : obj.opacity
       );
+      // Soft-dim objects outside the active draw target on this level
+      const multiUnit = this.unitsForActiveLevel().length > 1;
+      const hasShared = this.visibleObjects().some((o) => !o.unitId);
+      if (multiUnit || hasShared || this.activeUnitId === null) {
+        const active = this.activeUnitId; // null = shared
+        const objUnit = obj.unitId || null;
+        if (objUnit !== active) {
+          opacity = Math.min(opacity, 0.38);
+        }
+      }
       const selected = this.isSelected(obj.id);
       // Selected objects float above siblings so outline is never buried
       const z = selected
@@ -745,8 +1130,12 @@ export function floorPlanApp(): FloorPlanApp {
         const o = Math.max(2, Math.round(2.25 * invZ));
         style.outline = o + "px solid #2f6fed";
         style.outlineOffset = "0px";
-        // Light blue selection fill for floors / terrain / large areas
-        if (obj.type === "floor" || obj.type === "terrain") {
+        // Light blue selection fill for rooms / terrain / large areas
+        if (
+          obj.type === "room" ||
+          obj.type === "furniture" ||
+          obj.type === "terrain"
+        ) {
           style.backgroundColor = "rgba(59, 130, 246, 0.18)";
         } else if (obj.type === "window" || obj.type === "door") {
           style.backgroundColor = "rgba(147, 197, 253, 0.55)";
@@ -881,7 +1270,9 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     doorObjects() {
-      return this.objects.filter((o) => o.type === "door" && o.visible !== false);
+      return this.visibleObjects().filter(
+        (o) => o.type === "door" && o.visible !== false
+      );
     },
 
     doorIsHorizontal(obj) {
@@ -1160,18 +1551,18 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     planMeta() {
-      const floors = this.objects.filter((o) => o.type === "floor");
-      if (!floors.length) {
-        return this.objects.length + " objects · no floors yet";
+      const rooms = this.objects.filter((o) => o.type === "room");
+      if (!rooms.length) {
+        return this.objects.length + " objects · no rooms yet";
       }
-      const areaPx = floors.reduce((sum, f) => sum + f.width * f.height, 0);
+      const areaPx = rooms.reduce((sum, f) => sum + f.width * f.height, 0);
       return this.objects.length + " objects · " + formatArea(areaPx);
     },
 
     floorAreaLabel() {
-      const floors = this.objects.filter((o) => o.type === "floor");
-      if (!floors.length) return "—";
-      const areaPx = floors.reduce((sum, f) => sum + f.width * f.height, 0);
+      const rooms = this.objects.filter((o) => o.type === "room");
+      if (!rooms.length) return "—";
+      const areaPx = rooms.reduce((sum, f) => sum + f.width * f.height, 0);
       return formatArea(areaPx);
     },
 
@@ -1362,7 +1753,7 @@ export function floorPlanApp(): FloorPlanApp {
       if (!primary) return;
 
       const exclude = new Set(drag.peers.map((p) => p.id));
-      const others = this.objects.filter((o) => !exclude.has(o.id));
+      const others = this.visibleObjects().filter((o) => !exclude.has(o.id));
       const snapped = snapPosition(
         {
           x: drag.x,
@@ -1731,6 +2122,18 @@ export function floorPlanApp(): FloorPlanApp {
       return obj.type.charAt(0).toUpperCase() + obj.type.slice(1);
     },
 
+    /**
+     * Unit name for an object (for layers when several apartments share a level).
+     * @param obj - Plan object
+     * @returns Unit display name or empty
+     */
+    unitNameForObject(obj) {
+      if (!obj) return "";
+      if (!obj.unitId) return "Shared";
+      const u = this.units.find((x) => x.id === obj.unitId);
+      return u ? u.name : "Shared";
+    },
+
     getGroup(groupId) {
       return this.groups.find((g) => g.id === groupId) || null;
     },
@@ -1740,7 +2143,8 @@ export function floorPlanApp(): FloorPlanApp {
      * Groups appear once when first (topmost) member is hit.
      */
     layersView() {
-      const ordered = this.objects.slice().reverse();
+      const levelObjs = this.visibleObjects();
+      const ordered = levelObjs.slice().reverse();
       const seenGroups = new Set();
       const rows = [];
 
@@ -1754,7 +2158,7 @@ export function floorPlanApp(): FloorPlanApp {
               name: "Group",
               collapsed: false,
             };
-            const members = this.objects.filter((o) => o.groupId === gid);
+            const members = levelObjs.filter((o) => o.groupId === gid);
             rows.push({
               kind: "group",
               id: gid,
@@ -2053,6 +2457,12 @@ export function floorPlanApp(): FloorPlanApp {
         objects: this.objects,
         groups: this.groups,
         groupSeq: this.groupSeq,
+        levels: this.levels,
+        units: this.units,
+        levelSeq: this.levelSeq,
+        unitSeq: this.unitSeq,
+        activeLevelId: this.activeLevelId,
+        activeUnitId: this.activeUnitId,
         labelOffsets: this.labelOffsets,
         selectedId: this.selectedId,
         selectedIds: this.selectedIds,
@@ -2080,13 +2490,28 @@ export function floorPlanApp(): FloorPlanApp {
       this._historyPaused = true;
       try {
         const data = JSON.parse(snap);
-        this.objects = Array.isArray(data.objects) ? data.objects : [];
-        this.groups = Array.isArray(data.groups) ? data.groups : [];
-        this.groupSeq = Number(data.groupSeq) || 1;
-        this.labelOffsets =
-          data.labelOffsets && typeof data.labelOffsets === "object"
-            ? data.labelOffsets
-            : {};
+        const migrated = normalizePlanDocument(data);
+        this.objects = migrated.objects;
+        this.groups = migrated.groups;
+        this.groupSeq = migrated.groupSeq;
+        this.levels = migrated.levels;
+        this.units = migrated.units;
+        this.levelSeq = migrated.levelSeq;
+        this.unitSeq = migrated.unitSeq;
+        this.activeLevelId =
+          data.activeLevelId &&
+          migrated.levels.some((l) => l.id === data.activeLevelId)
+            ? data.activeLevelId
+            : migrated.levels[0]?.id || null;
+        this.activeUnitId =
+          data.activeUnitId &&
+          migrated.units.some((u) => u.id === data.activeUnitId)
+            ? data.activeUnitId
+            : migrated.units.find((u) => u.levelId === this.activeLevelId)
+                ?.id ||
+              migrated.units[0]?.id ||
+              null;
+        this.labelOffsets = migrated.labelOffsets;
         this.selectedId = data.selectedId || null;
         this.selectedIds = Array.isArray(data.selectedIds)
           ? data.selectedIds
@@ -2219,6 +2644,11 @@ export function floorPlanApp(): FloorPlanApp {
           locked: !!src.locked,
           // Fresh copy is not in the source group
           groupId: null,
+          levelId: src.levelId || this.activeLevelId || "",
+          unitId:
+            src.unitId === null || src.unitId === undefined
+              ? null
+              : src.unitId || this.activeUnitId || null,
           opacity: src.opacity,
           showDimensions: src.showDimensions !== false,
         };
@@ -2382,7 +2812,9 @@ export function floorPlanApp(): FloorPlanApp {
      * @returns null when there is nothing to frame
      */
     contentBounds() {
-      const visible = this.objects.filter((o) => o && o.visible !== false);
+      const visible = this.visibleObjects().filter(
+        (o) => o && o.visible !== false
+      );
       if (!visible.length) return null;
       let minX = Infinity;
       let minY = Infinity;
@@ -2549,9 +2981,89 @@ export function floorPlanApp(): FloorPlanApp {
 
     // --- Palette drag → place ---
 
+    /**
+     * Show the fixed help card next to a tools palette control.
+     * Uses position:fixed so the left panel's overflow does not clip it.
+     * @param event - mouseenter / focusin
+     * @param label - Tool name
+     * @param description - Longer help text
+     */
+    showPaletteTip(event, label, description) {
+      // Clear structure ? state when opening a palette hover tip
+      if (this.structureHelpKind && event.type !== "click") {
+        this.structureHelpKind = null;
+      }
+      const el = event.currentTarget;
+      if (!el || typeof el.getBoundingClientRect !== "function") return;
+      const r = el.getBoundingClientRect();
+      const gap = 10;
+      const tipW = 260;
+      // Prefer left of the ? button when near the right edge
+      let x = r.right + gap;
+      if (x + tipW > window.innerWidth - 8) {
+        x = Math.max(8, r.left - gap - tipW);
+      }
+      this.paletteHoverTip = {
+        label: String(label || ""),
+        description: String(description || ""),
+        x,
+        y: r.top + r.height / 2,
+      };
+    },
+
+    /** Hide the tools palette help card. */
+    hidePaletteTip() {
+      this.paletteHoverTip = null;
+    },
+
+    /** Style map for the fixed palette tip. */
+    paletteTipStyle() {
+      const tip = this.paletteHoverTip;
+      if (!tip) return { display: "none" };
+      return {
+        left: tip.x + "px",
+        top: tip.y + "px",
+      };
+    },
+
+    /**
+     * Toggle level/unit help from the ? control (click).
+     * @param event - click event
+     * @param kind - "level" | "unit"
+     */
+    toggleStructureHelp(event, kind) {
+      if (this.structureHelpKind === kind && this.paletteHoverTip) {
+        this.structureHelpKind = null;
+        this.hidePaletteTip();
+        return;
+      }
+      const copy =
+        kind === "level"
+          ? {
+              label: "Level",
+              description:
+                "A level is one story of the building (Ground, Level 1, …). Everything on this tab is that story. Use + Level or Duplicate level for another story above.",
+            }
+          : {
+              label: "Unit",
+              description:
+                "A unit is one apartment or house. Shared is for level-only objects (terrain, stairs, corridors) not inside an apartment. Select Shared or a unit, then draw. Assign selection moves selected objects into the active target.",
+            };
+      this.showPaletteTip(event, copy.label, copy.description);
+      this.structureHelpKind = kind;
+    },
+
+    /** Close structure help if open. */
+    hideStructureHelp() {
+      if (!this.structureHelpKind) return;
+      this.structureHelpKind = null;
+      this.hidePaletteTip();
+    },
+
     startPaletteDrag(e, type) {
       if (e.button !== 0) return;
       e.preventDefault();
+      this.hidePaletteTip();
 
       const def = CATALOG[type];
       this.paletteDrag = {
@@ -2605,13 +3117,19 @@ export function floorPlanApp(): FloorPlanApp {
       const worldX = (clientX - rect.left - this.panX) / this.zoom - def.defaults.width / 2;
       const worldY = (clientY - rect.top - this.panY) / this.zoom - def.defaults.height / 2;
 
+      const levelId = this.activeLevelId || "";
+      // null = shared on the level (terrain, stairs, etc.)
+      const unitId = this.activeUnitId || null;
       let obj = createObject(type, {
         x: worldX,
         y: worldY,
+        levelId,
+        unitId,
       });
 
-      // Snap to partners on drop (screen-space range via zoom)
-      const snapped = snapPosition(obj, this.objects, type, {
+      // Snap to partners on the active level only
+      const partners = this.visibleObjects();
+      const snapped = snapPosition(obj, partners, type, {
         useGrid: true,
         zoom: this.zoom || 1,
       });

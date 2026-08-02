@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildPlanDocument,
+  createDefaultStructure,
   createProject,
   emptyPlanDocument,
   isProjectId,
@@ -19,10 +20,12 @@ import {
 } from "@fp/projects";
 import type { PlanObject } from "@fp/types";
 
+const structure = createDefaultStructure();
+
 const sampleObject = {
   id: "floor-1",
-  type: "floor",
-  name: "Room",
+  type: "room",
+  name: "Living room",
   notes: "",
   x: 0,
   y: 0,
@@ -33,11 +36,20 @@ const sampleObject = {
   visible: true,
   locked: false,
   groupId: null,
+  levelId: structure.levels[0].id,
+  unitId: structure.units[0].id,
   opacity: 1,
   showDimensions: false,
   dimOffW: { x: 0, y: 0 },
   dimOffH: { x: 0, y: 0 },
 } as PlanObject;
+
+const structureFields = {
+  levels: structure.levels,
+  units: structure.units,
+  levelSeq: structure.levelSeq,
+  unitSeq: structure.unitSeq,
+};
 
 describe("emptyPlanDocument / normalizePlanDocument", () => {
   it("returns a stable empty document", () => {
@@ -65,6 +77,54 @@ describe("emptyPlanDocument / normalizePlanDocument", () => {
     expect(doc.showDimensionsGlobal).toBe(true);
     expect(doc.zoom).toBe(0.5);
   });
+
+  it("migrates legacy type floor to room or furniture", () => {
+    const doc = normalizePlanDocument({
+      objects: [
+        { id: "a", type: "floor", name: "Quarto" },
+        { id: "b", type: "floor", name: "Sofá" },
+      ],
+    });
+    expect(doc.objects[0].type).toBe("room");
+    expect(doc.objects[1].type).toBe("furniture");
+    expect(doc.levels.length).toBeGreaterThanOrEqual(1);
+    expect(doc.units.length).toBeGreaterThanOrEqual(1);
+    expect(doc.objects[0].levelId).toBeTruthy();
+    // Legacy objects without a unit stay level-shared (null)
+    expect(doc.objects[0].unitId).toBeNull();
+    expect(doc.objects[1].unitId).toBeNull();
+  });
+
+  it("keeps null unitId as level-shared", () => {
+    const doc = normalizePlanDocument({
+      objects: [
+        {
+          id: "t1",
+          type: "terrain",
+          name: "Lot",
+          levelId: "level-1",
+          unitId: null,
+        },
+        {
+          id: "r1",
+          type: "room",
+          name: "Estar",
+          levelId: "level-1",
+          unitId: "unit-1",
+        },
+      ],
+      levels: [{ id: "level-1", name: "Ground", order: 0 }],
+      units: [{ id: "unit-1", name: "Apt 1", levelId: "level-1" }],
+    });
+    expect(doc.objects[0].unitId).toBeNull();
+    expect(doc.objects[1].unitId).toBe("unit-1");
+  });
+
+  it("seeds default Ground + Main structure when missing", () => {
+    const doc = emptyPlanDocument();
+    expect(doc.levels[0].name).toBe("Ground");
+    expect(doc.units[0].name).toBe("Main");
+  });
 });
 
 describe("buildPlanDocument", () => {
@@ -74,6 +134,7 @@ describe("buildPlanDocument", () => {
       objects,
       groups: [],
       groupSeq: 2,
+      ...structureFields,
       labelOffsets: {},
       showDimensionsGlobal: true,
       zoom: 0.3,
@@ -83,6 +144,7 @@ describe("buildPlanDocument", () => {
     expect(doc.objects).toEqual(objects);
     expect(doc.objects).not.toBe(objects);
     expect(doc.groupSeq).toBe(2);
+    expect(doc.levels).toHaveLength(1);
     expect(doc.zoom).toBe(0.3);
     expect(doc.panX).toBe(10);
     expect(doc.panY).toBe(20);
@@ -99,6 +161,7 @@ describe("buildPlanDocument", () => {
       objects: objects as PlanObject[],
       groups: [],
       groupSeq: 1,
+      ...structureFields,
       labelOffsets: {},
       showDimensionsGlobal: false,
     });
@@ -113,6 +176,7 @@ describe("planDocumentToExport", () => {
       objects: [sampleObject],
       groups: [],
       groupSeq: 1,
+      ...structureFields,
       labelOffsets: {
         "floor-1": {
           w: { x: 5, y: 6 },

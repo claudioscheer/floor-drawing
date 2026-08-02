@@ -11,8 +11,37 @@ import type {
 } from "@fp/types";
 import { clampOpacity, normalizeRotation } from "@fp/geometry";
 import { m } from "@fp/units";
-import { CATALOG } from "./catalog-data";
+import { CATALOG, isFurnitureName } from "./catalog-data";
 import { nextId } from "./ids";
+
+const OBJECT_TYPES = new Set<ObjectType>(
+  Object.keys(CATALOG) as ObjectType[]
+);
+
+/**
+ * Whether a string is a current {@link ObjectType}.
+ * @param type - Candidate type
+ */
+export function isObjectType(type: string): type is ObjectType {
+  return OBJECT_TYPES.has(type as ObjectType);
+}
+
+/**
+ * Normalize a stored type (including legacy `"floor"`) to a current ObjectType.
+ * Legacy floors with furniture-like names become furniture; others become rooms.
+ * @param type - Stored type string
+ * @param name - Object name (used for floor → furniture heuristic)
+ */
+export function normalizeObjectType(
+  type: string,
+  name: string = ""
+): ObjectType {
+  if (type === "floor") {
+    return isFurnitureName(name) ? "furniture" : "room";
+  }
+  if (isObjectType(type)) return type;
+  return "room";
+}
 
 /**
  * Create a plan object of the given type.
@@ -53,6 +82,17 @@ export function createObject(
       overrides.groupId != null && overrides.groupId !== ""
         ? String(overrides.groupId)
         : null,
+    levelId:
+      overrides.levelId != null && overrides.levelId !== ""
+        ? String(overrides.levelId)
+        : "",
+    // null = shared on the level (not inside a unit / apartment)
+    unitId:
+      overrides.unitId === null
+        ? null
+        : overrides.unitId != null && overrides.unitId !== ""
+          ? String(overrides.unitId)
+          : null,
     opacity: clampOpacity(
       overrides.opacity !== undefined ? overrides.opacity : (def.defaults.opacity ?? 1)
     ),

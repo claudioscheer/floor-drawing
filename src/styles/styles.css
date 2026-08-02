@@ -222,6 +222,123 @@ button {
   cursor: not-allowed;
 }
 
+/* Levels + units bar (under app header) */
+.structure-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  z-index: 15;
+}
+
+.structure-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+
+.structure-label {
+  flex-shrink: 0;
+  width: 40px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.structure-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.structure-tab {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.structure-tab:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.structure-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.structure-tab-unit.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.structure-tab-shared.is-active {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.structure-add {
+  margin-left: 2px;
+}
+
+.structure-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
+.structure-drawing-into {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.structure-help-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.structure-help-btn:hover,
+.structure-help-btn.is-open {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .app-body {
   flex: 1;
   display: grid;
@@ -1032,6 +1149,29 @@ button {
   text-align: right;
 }
 
+.layer-unit-tag {
+  flex-shrink: 0;
+  max-width: 72px;
+  padding: 0 5px;
+  height: 16px;
+  line-height: 16px;
+  border-radius: 2px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layer-unit-tag.is-shared {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
 .layer-icon-btn {
   flex-shrink: 0;
   width: 20px;
@@ -1086,6 +1226,10 @@ button {
   gap: 2px;
 }
 
+.palette-li {
+  position: relative;
+}
+
 .palette-item {
   width: 100%;
   display: flex;
@@ -1100,11 +1244,49 @@ button {
   text-align: left;
   touch-action: none;
   user-select: none;
+  position: relative;
 }
 
 .palette-item:hover {
   background: var(--surface-3);
   border-color: var(--border-soft);
+  z-index: 5;
+}
+
+/*
+ * Tool help card — position:fixed on #app so panel overflow does not clip it.
+ * left/top set via paletteTipStyle() to the button's viewport edge.
+ */
+.palette-tip-fixed {
+  position: fixed;
+  z-index: 500;
+  width: 240px;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(26, 29, 36, 0.14);
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-50%);
+}
+
+.palette-tip-fixed .palette-tip-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.palette-tip-fixed .palette-tip-body {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: normal;
 }
 
 .palette-item.is-active {
@@ -1202,18 +1384,36 @@ button {
   opacity: 0.55;
 }
 
-/* Floor: room slab */
-.tool-glyph-floor {
+/* Room: space slab */
+.tool-glyph-room {
   background: var(--plan-floor);
   border-color: var(--plan-floor-edge) !important;
 }
 
-.tool-glyph-floor::before {
+.tool-glyph-room::before {
   content: "";
   position: absolute;
   inset: 6px;
   border: 1.5px solid var(--plan-floor-edge);
   background: var(--plan-floor);
+}
+
+/* Furniture: smaller filled block */
+.tool-glyph-furniture {
+  background: #f3ebe1;
+  border-color: #6b5b4a !important;
+}
+
+.tool-glyph-furniture::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 9px;
+  bottom: 7px;
+  background: #c4b09a;
+  border: 1px solid #6b5b4a;
+  border-radius: 1px;
 }
 
 /* Wall: thick bar */
@@ -1762,7 +1962,14 @@ button {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-.fp-object--floor {
+.fp-object--terrain .fp-object-label-area {
+  color: #2a4020;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.fp-object--room {
   background: var(--plan-floor);
   border: 1.5px solid var(--plan-floor-edge);
   box-shadow:
@@ -1771,18 +1978,34 @@ button {
   z-index: 1;
 }
 
-.fp-object--floor .fp-object-label {
+.fp-object--room .fp-object-label {
   color: #3a4150;
   font-weight: 600;
   font-size: 10px;
   opacity: 0.95;
 }
 
-.fp-object--floor .fp-object-label-area {
+.fp-object--room .fp-object-label-area {
   color: #1a1d24;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.fp-object--furniture {
+  background: #e8e0d4;
+  border: 1.5px solid #6b5b4a;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  z-index: 3;
+}
+
+.fp-object--furniture .fp-object-label {
+  color: #3a3228;
+  font-weight: 600;
+  font-size: 10px;
+  opacity: 0.95;
 }
 
 .fp-object--wall {
@@ -2390,9 +2613,14 @@ button {
   border: 1.5px dashed #6b8f5a;
 }
 
-.palette-ghost.fp-object--floor {
+.palette-ghost.fp-object--room {
   background: #fff;
   border: 1px solid #222;
+}
+
+.palette-ghost.fp-object--furniture {
+  background: #e8e0d4;
+  border: 1px solid #6b5b4a;
 }
 
 .palette-ghost.fp-object--wall {

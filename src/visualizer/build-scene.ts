@@ -238,10 +238,10 @@ export function buildSceneFromPlan(objects: readonly PlanObject[]): BuiltScene {
     }
   }
 
-  // Floors + furniture (each kind gets its own top height → no coplanar fight)
+  // Rooms + furniture (each kind gets its own top height → no coplanar fight)
   for (const obj of objects) {
     if (obj.visible === false) continue;
-    if (obj.type !== "floor") continue;
+    if (obj.type !== "room" && obj.type !== "furniture") continue;
 
     const kind = classifyFloor(obj);
     const w = pxToM(obj.width);
@@ -381,7 +381,7 @@ function pickSpawn(
 
   // Prefer vehicle corridor: apartments on the west, parking on the east.
   const drive = objects.find(
-    (o) => o.type === "floor" && /circul/i.test(o.name || "")
+    (o) => o.type === "room" && /circul/i.test(o.name || "")
   );
   if (drive) {
     return {

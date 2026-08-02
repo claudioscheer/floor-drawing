@@ -14,9 +14,11 @@ import type {
   LabelOffsetsMap,
   LayerDragState,
   LayerRow,
+  Level,
   ObjectDragState,
   ObjectType,
   PaletteDragState,
+  PaletteHoverTip,
   PanState,
   PlanDocument,
   PlanObject,
@@ -26,6 +28,7 @@ import type {
   SelectOptions,
   SnapGuides,
   StyleMap,
+  Unit,
 } from "@fp/types";
 import type { VisualizerHandle } from "@fp/visualizer";
 
@@ -51,6 +54,12 @@ export interface FloorPlanApp extends AlpineMagic {
   selectedIds: string[];
   groups: Group[];
   groupSeq: number;
+  levels: Level[];
+  units: Unit[];
+  levelSeq: number;
+  unitSeq: number;
+  activeLevelId: string | null;
+  activeUnitId: string | null;
   zoom: number;
   panX: number;
   panY: number;
@@ -71,6 +80,10 @@ export interface FloorPlanApp extends AlpineMagic {
   _historyPaused: boolean;
   layerDrag: LayerDragState;
   palette: CatalogListItem[];
+  /** Fixed-position help card while hovering a tools palette item. */
+  paletteHoverTip: PaletteHoverTip | null;
+  /** Open structure help: "level" | "unit" | null */
+  structureHelpKind: "level" | "unit" | null;
   snapGuides: SnapGuides;
   panState: PanState;
   paletteDrag: PaletteDragState;
@@ -123,6 +136,19 @@ export interface FloorPlanApp extends AlpineMagic {
   flushSave(): Promise<void>;
   buildPlanDocument(): PlanDocument;
   applyPlanDocument(doc: PlanDocument): void;
+  visibleObjects(): PlanObject[];
+  unitsForActiveLevel(): Unit[];
+  setActiveLevel(levelId: string): void;
+  setActiveUnit(unitId: string | null): void;
+  activeUnitLabel(): string;
+  assignSelectionToActiveUnit(): void;
+  addLevel(): void;
+  duplicateActiveLevel(): void;
+  addUnit(): void;
+  renameLevel(levelId: string, name: string): void;
+  renameUnit(unitId: string, name: string): void;
+  deleteLevel(levelId: string): void;
+  deleteUnit(unitId: string): void;
   saveStatusLabel(): string;
   formatProjectDate(iso: string): string;
   isTypingTarget(el: EventTarget | null): boolean;
@@ -200,6 +226,7 @@ export interface FloorPlanApp extends AlpineMagic {
   ensureObjectInView(id: string): void;
   selectGroup(groupId: string, opts?: SelectOptions): void;
   layerDisplayName(obj: PlanObject | null): string;
+  unitNameForObject(obj: PlanObject | null): string;
   getGroup(groupId: string): Group | null;
   layersView(): LayerRow[];
   toggleGroupCollapsed(groupId: string): void;
@@ -249,6 +276,18 @@ export interface FloorPlanApp extends AlpineMagic {
   onViewportClick(e: MouseEvent): void;
   startPaletteDrag(e: PointerEvent, type: ObjectType): void;
   placeFromPalette(clientX: number, clientY: number, type: ObjectType | string): void;
+  showPaletteTip(
+    event: MouseEvent | FocusEvent,
+    label: string,
+    description: string
+  ): void;
+  hidePaletteTip(): void;
+  paletteTipStyle(): StyleMap;
+  toggleStructureHelp(
+    event: MouseEvent,
+    kind: "level" | "unit"
+  ): void;
+  hideStructureHelp(): void;
 
   /**
    * Domain helpers exposed for tests (no window globals).

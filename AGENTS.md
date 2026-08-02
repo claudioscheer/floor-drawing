@@ -32,8 +32,8 @@ Rules for any agent or human working in this repository. Follow them strictly.
 ```
 types ← units ← geometry ← catalog ← doors
                               ↑
-                            demo
-types ← projects
+                            demo → projects (structure helpers for demo seed)
+types ← catalog ← projects   (document load migrates legacy types; levels/units)
 types ← geometry ← snap
 app → catalog | snap | doors | demo | geometry | units | interact | visualizer | projects
 interact → snap | catalog | geometry | types

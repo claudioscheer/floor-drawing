@@ -29,3 +29,15 @@ export {
   parseProjectIdFromPath,
   isProjectsListPath,
 } from "./routes";
+
+export {
+  DEFAULT_LEVEL_ID,
+  DEFAULT_UNIT_ID,
+  createDefaultStructure,
+  normalizeLevels,
+  normalizeUnits,
+  ensureObjectStructure,
+  unitsOnLevel,
+  nextLevelName,
+  nextUnitName,
+} from "./structure";

@@ -28,6 +28,8 @@ function rect(
     visible: true,
     locked: false,
     groupId: null,
+    levelId: partial.levelId ?? "level-1",
+    unitId: partial.unitId ?? "unit-1",
     opacity: 1,
     showDimensions: true,
     dimOffW: { x: 0, y: 0 },
@@ -65,9 +67,9 @@ describe("snap", () => {
   });
 
   it("snaps moving floor left edge to partner floor", () => {
-    const partner = rect({ type: "floor", x: 200, y: 0, width: 100, height: 100 });
+    const partner = rect({ type: "room", x: 200, y: 0, width: 100, height: 100 });
     const moving = { x: 200 - 8, y: 10, width: 80, height: 80, rotation: 0 };
-    const result = snapPosition(moving, [partner], "floor", {
+    const result = snapPosition(moving, [partner], "room", {
       useGrid: false,
       range: 12,
     });
@@ -80,7 +82,7 @@ describe("snap", () => {
     const wall = rect({ type: "wall", x: 500, y: 0, width: 20, height: 400 });
     // Floor right edge is 15 px left of wall left (500)
     const moving = { x: 500 - 100 - 15, y: 50, width: 100, height: 80, rotation: 0 };
-    const result = snapPosition(moving, [wall], "floor", {
+    const result = snapPosition(moving, [wall], "room", {
       useGrid: false,
       range: 20,
     });
@@ -131,14 +133,14 @@ describe("snap", () => {
     const wall = rect({ type: "wall", x: 1000, y: 200, width: 20, height: 100 });
     // 24 cm from wall — outside fixed range 12, inside zoomed-out sqrt range (~28 at z=0.25)
     const moving = { x: 1000 - 80 - 24, y: 500, width: 80, height: 60, rotation: 0 };
-    const noZoom = snapPosition(moving, [wall], "floor", {
+    const noZoom = snapPosition(moving, [wall], "room", {
       useGrid: false,
       range: 12,
     });
     expect(noZoom.x).toBe(moving.x);
     expect(noZoom.active).toBe(false);
 
-    const withZoom = snapPosition(moving, [wall], "floor", {
+    const withZoom = snapPosition(moving, [wall], "room", {
       useGrid: false,
       zoom: 0.25, // 14 / sqrt(0.25) = 28 cm
     });
@@ -150,7 +152,7 @@ describe("snap", () => {
     const wall = rect({ type: "wall", x: 1000, y: 200, width: 20, height: 100 });
     // 50 cm away — beyond SNAP_RANGE_MAX (36) even at min zoom
     const moving = { x: 1000 - 80 - 50, y: 500, width: 80, height: 60, rotation: 0 };
-    const result = snapPosition(moving, [wall], "floor", {
+    const result = snapPosition(moving, [wall], "room", {
       useGrid: false,
       zoom: 0.15,
     });

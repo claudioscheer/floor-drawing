@@ -8,6 +8,10 @@ export interface PlanDocument {
   objects: unknown[];
   groups: unknown[];
   groupSeq: number;
+  levels?: unknown[];
+  units?: unknown[];
+  levelSeq?: number;
+  unitSeq?: number;
   labelOffsets: Record<string, unknown>;
   showDimensionsGlobal: boolean;
   zoom?: number;
@@ -15,12 +19,16 @@ export interface PlanDocument {
   panY?: number;
 }
 
-/** Empty document for a new project. */
+/** Empty document for a new project (frontend normalizes full structure). */
 export function emptyPlanDocument(): PlanDocument {
   return {
     objects: [],
     groups: [],
     groupSeq: 1,
+    levels: [{ id: "level-1", name: "Ground", order: 0 }],
+    units: [{ id: "unit-1", name: "Main", levelId: "level-1" }],
+    levelSeq: 1,
+    unitSeq: 1,
     labelOffsets: {},
     showDimensionsGlobal: false,
   };

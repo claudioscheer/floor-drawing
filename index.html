@@ -269,6 +269,139 @@
         </div>
       </header>
 
+      <!-- Building structure: levels (stories) + units (house / apartment) -->
+      <div
+        class="structure-bar"
+        x-show="screen === 'editor' && viewMode === 'layout'"
+        x-cloak
+        role="region"
+        aria-label="Levels and units"
+      >
+        <div class="structure-row structure-levels">
+          <span class="structure-label">Level</span>
+          <div class="structure-tabs" role="tablist" aria-label="Building levels">
+            <template x-for="level in levels" :key="level.id">
+              <button
+                type="button"
+                class="structure-tab"
+                role="tab"
+                :class="activeLevelId === level.id ? 'is-active' : ''"
+                :aria-selected="(activeLevelId === level.id).toString()"
+                @click="setActiveLevel(level.id)"
+                @dblclick="renameLevel(level.id, prompt('Level name', level.name) || level.name)"
+                x-text="level.name"
+              ></button>
+            </template>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm structure-add"
+              @click="addLevel()"
+              title="Add a story (level)"
+            >
+              + Level
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="duplicateActiveLevel()"
+              :disabled="!activeLevelId"
+              title="Duplicate this level (typical floor)"
+            >
+              Duplicate level
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger btn-sm"
+              @click="deleteLevel(activeLevelId)"
+              :disabled="!activeLevelId || levels.length <= 1"
+              title="Delete active level"
+            >
+              Delete level
+            </button>
+          </div>
+          <button
+            type="button"
+            class="structure-help-btn"
+            :class="structureHelpKind === 'level' ? 'is-open' : ''"
+            @click.stop="toggleStructureHelp($event, 'level')"
+            aria-label="About levels"
+            title="About levels"
+          >
+            ?
+          </button>
+        </div>
+        <div class="structure-row structure-units">
+          <span class="structure-label">Unit</span>
+          <div class="structure-tabs" role="tablist" aria-label="Units on this level">
+            <button
+              type="button"
+              class="structure-tab structure-tab-shared"
+              role="tab"
+              :class="activeUnitId === null ? 'is-active' : ''"
+              :aria-selected="(activeUnitId === null).toString()"
+              @click="setActiveUnit(null)"
+              title="Level only: terrain, stairs, corridors — not inside an apartment"
+            >
+              Shared
+            </button>
+            <template x-for="unit in unitsForActiveLevel()" :key="unit.id">
+              <button
+                type="button"
+                class="structure-tab structure-tab-unit"
+                role="tab"
+                :class="activeUnitId === unit.id ? 'is-active' : ''"
+                :aria-selected="(activeUnitId === unit.id).toString()"
+                @click="setActiveUnit(unit.id)"
+                @dblclick="renameUnit(unit.id, prompt('Unit name (e.g. Apt 1)', unit.name) || unit.name)"
+                x-text="unit.name"
+                :title="'Drawing into ' + unit.name + '. Double-click to rename.'"
+              ></button>
+            </template>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm structure-add"
+              @click="addUnit()"
+              :disabled="!activeLevelId"
+              title="Add another apartment/unit on this level"
+            >
+              + Unit
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="assignSelectionToActiveUnit()"
+              :disabled="!(selectedId || (selectedIds && selectedIds.length))"
+              title="Move selection into Shared (level) or the active unit"
+            >
+              Assign selection
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger btn-sm"
+              @click="deleteUnit(activeUnitId)"
+              :disabled="!activeUnitId || unitsForActiveLevel().length <= 1"
+              title="Delete the selected unit and its objects"
+            >
+              Delete unit
+            </button>
+          </div>
+          <span
+            class="structure-drawing-into"
+            x-text="'Drawing into: ' + activeUnitLabel()"
+          ></span>
+          <button
+            type="button"
+            class="structure-help-btn"
+            :class="structureHelpKind === 'unit' ? 'is-open' : ''"
+            @click.stop="toggleStructureHelp($event, 'unit')"
+            aria-label="About units"
+            title="About units"
+          >
+            ?
+          </button>
+        </div>
+      </div>
+
       <div
         class="app-body"
         x-show="screen === 'editor'"
@@ -291,7 +424,11 @@
                     class="palette-item"
                     :class="activeTool === 'select' ? 'is-active' : ''"
                     @click="setTool('select')"
-                    title="Select and move objects (V)"
+                    @mouseenter="showPaletteTip($event, 'Select', 'Click objects to select them. Drag to move. Use V as a shortcut.')"
+                    @mouseleave="hidePaletteTip()"
+                    @focus="showPaletteTip($event, 'Select', 'Click objects to select them. Drag to move. Use V as a shortcut.')"
+                    @blur="hidePaletteTip()"
+                    aria-label="Select. Click objects to select them. Drag to move."
                   >
                     <span class="tool-glyph tool-glyph-select" aria-hidden="true"></span>
                     <span class="palette-label">Select</span>
@@ -303,7 +440,11 @@
                     class="palette-item"
                     :class="activeTool === 'pan' ? 'is-active' : ''"
                     @click="setTool('pan')"
-                    title="Hand: pan the canvas (H). Scroll pans · ⌘/Ctrl+scroll zooms."
+                    @mouseenter="showPaletteTip($event, 'Hand', 'Pan the canvas by dragging. Scroll pans; ⌘/Ctrl+scroll zooms. Shortcut H. Hold Space for temporary pan.')"
+                    @mouseleave="hidePaletteTip()"
+                    @focus="showPaletteTip($event, 'Hand', 'Pan the canvas by dragging. Scroll pans; ⌘/Ctrl+scroll zooms. Shortcut H. Hold Space for temporary pan.')"
+                    @blur="hidePaletteTip()"
+                    aria-label="Hand. Pan the canvas by dragging."
                   >
                     <span class="tool-glyph tool-glyph-pan" aria-hidden="true"></span>
                     <span class="palette-label">Hand</span>
@@ -315,76 +456,30 @@
             <div class="palette-group">
               <div class="palette-group-label">Place</div>
               <ul class="palette" role="list">
-                <li>
-                  <button
-                    type="button"
-                    class="palette-item"
-                    :class="activeTool === 'terrain' ? 'is-active' : ''"
-                    data-component-type="terrain"
-                    @pointerdown="startPaletteDrag($event, 'terrain')"
-                    @click="setTool('terrain')"
-                    title="Place terrain / site plot"
-                  >
-                    <span class="tool-glyph tool-glyph-terrain" aria-hidden="true"></span>
-                    <span class="palette-label">Terrain</span>
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    class="palette-item"
-                    :class="activeTool === 'floor' ? 'is-active' : ''"
-                    data-component-type="floor"
-                    @pointerdown="startPaletteDrag($event, 'floor')"
-                    @click="setTool('floor')"
-                    title="Place floor (drag or click canvas)"
-                  >
-                    <span class="tool-glyph tool-glyph-floor" aria-hidden="true"></span>
-                    <span class="palette-label">Floor</span>
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    class="palette-item"
-                    :class="activeTool === 'wall' ? 'is-active' : ''"
-                    data-component-type="wall"
-                    @pointerdown="startPaletteDrag($event, 'wall')"
-                    @click="setTool('wall')"
-                    title="Place wall (drag or click canvas)"
-                  >
-                    <span class="tool-glyph tool-glyph-wall" aria-hidden="true"></span>
-                    <span class="palette-label">Wall</span>
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    class="palette-item"
-                    :class="activeTool === 'window' ? 'is-active' : ''"
-                    data-component-type="window"
-                    @pointerdown="startPaletteDrag($event, 'window')"
-                    @click="setTool('window')"
-                    title="Place window (drag or click canvas)"
-                  >
-                    <span class="tool-glyph tool-glyph-window" aria-hidden="true"></span>
-                    <span class="palette-label">Window</span>
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    class="palette-item"
-                    :class="activeTool === 'door' ? 'is-active' : ''"
-                    data-component-type="door"
-                    @pointerdown="startPaletteDrag($event, 'door')"
-                    @click="setTool('door')"
-                    title="Place door (drag or click canvas)"
-                  >
-                    <span class="tool-glyph tool-glyph-door" aria-hidden="true"></span>
-                    <span class="palette-label">Door</span>
-                  </button>
-                </li>
+                <template x-for="item in palette" :key="item.type">
+                  <li class="palette-li">
+                    <button
+                      type="button"
+                      class="palette-item"
+                      :class="activeTool === item.type ? 'is-active' : ''"
+                      :data-component-type="item.type"
+                      @pointerdown="startPaletteDrag($event, item.type)"
+                      @click="setTool(item.type)"
+                      @mouseenter="showPaletteTip($event, item.label, item.description)"
+                      @mouseleave="hidePaletteTip()"
+                      @focus="showPaletteTip($event, item.label, item.description)"
+                      @blur="hidePaletteTip()"
+                      :aria-label="item.label + '. ' + item.description"
+                    >
+                      <span
+                        class="tool-glyph"
+                        :class="'tool-glyph-' + item.type"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="palette-label" x-text="item.label"></span>
+                    </button>
+                  </li>
+                </template>
               </ul>
             </div>
           </div>
@@ -523,6 +618,13 @@
                         :title="row.obj.type"
                       ></span>
                       <span class="layer-name" x-text="layerDisplayName(row.obj)"></span>
+                      <span
+                        class="layer-unit-tag"
+                        x-show="unitNameForObject(row.obj)"
+                        x-text="unitNameForObject(row.obj)"
+                        :class="!row.obj.unitId ? 'is-shared' : ''"
+                        :title="row.obj.unitId ? 'Belongs to unit ' + unitNameForObject(row.obj) : 'Shared on this level (not in a unit)'"
+                      ></span>
                       <button
                         type="button"
                         class="layer-icon-btn"
@@ -593,7 +695,7 @@
                 <div class="scale-bar-label">1.00 m</div>
               </div>
 
-              <template x-for="obj in objects" :key="obj.id">
+              <template x-for="obj in visibleObjects()" :key="obj.id">
                 <div
                   class="fp-object"
                   :class="objectClass(obj)"
@@ -603,11 +705,11 @@
                   :style="objectStyle(obj)"
                   @pointerdown="onObjectPointerDown($event, obj.id)"
                 >
-                  <!-- Floors: name + area m² in the center. Terrain: name only. -->
+                  <!-- Rooms + terrain: name + area m². Furniture: name. -->
                   <span
                     class="fp-object-label"
                     :style="labelStyle(obj)"
-                    x-show="obj.type === 'floor' || (obj.type === 'terrain' && obj.name)"
+                    x-show="obj.type === 'room' || obj.type === 'furniture' || obj.type === 'terrain'"
                   >
                     <span
                       class="fp-object-label-name"
@@ -616,7 +718,7 @@
                     ></span>
                     <span
                       class="fp-object-label-area"
-                      x-show="obj.type === 'floor'"
+                      x-show="obj.type === 'room' || obj.type === 'terrain'"
                       x-text="formatObjectArea(obj)"
                     ></span>
                   </span>
@@ -659,7 +761,7 @@
 
               <!-- Size labels live above objects so interact.js never steals the drag -->
               <div class="dims-layer" aria-hidden="false">
-                <template x-for="obj in objects" :key="'dims-' + obj.id">
+                <template x-for="obj in visibleObjects()" :key="'dims-' + obj.id">
                   <div
                     class="dims-group"
                     :class="dimsGroupClass(obj)"
@@ -910,7 +1012,7 @@
                   </div>
                 </div>
 
-                <div class="prop-row" x-show="selected.type === 'floor' || selected.type === 'terrain'" x-cloak>
+                <div class="prop-row" x-show="selected.type === 'room' || selected.type === 'furniture' || selected.type === 'terrain'" x-cloak>
                   <label for="prop-label-rot">Label</label>
                   <div class="prop-unit">
                     <input
@@ -927,7 +1029,7 @@
                 </div>
                 <div
                   class="prop-row prop-row-rot-presets"
-                  x-show="selected.type === 'floor' || selected.type === 'terrain'"
+                  x-show="selected.type === 'room' || selected.type === 'furniture' || selected.type === 'terrain'"
                   x-cloak
                 >
                   <label class="sr-only">Label rotation presets</label>
@@ -936,7 +1038,7 @@
                     <button type="button" class="btn-rot" title="Label upright" @click="setLabelRotation(0)">0°</button>
                     <button type="button" class="btn-rot" title="Label +45°" @click="nudgeLabelRotation(45)">+45°</button>
                     <button type="button" class="btn-rot" title="Label +90°" @click="nudgeLabelRotation(90)">90°</button>
-                    <button type="button" class="btn-rot" title="Match floor rotation" @click="matchLabelToObject()">Match</button>
+                    <button type="button" class="btn-rot" title="Match object rotation" @click="matchLabelToObject()">Match</button>
                   </div>
                 </div>
 
@@ -1031,9 +1133,19 @@
         :class="'fp-object--' + paletteDrag.type"
         :style="paletteGhostStyle()"
       ></div>
+
+      <!-- Fixed outside panels so overflow:hidden cannot clip tool help -->
+      <div
+        class="palette-tip-fixed"
+        x-show="paletteHoverTip"
+        x-cloak
+        :style="paletteTipStyle()"
+        role="tooltip"
+      >
+        <span class="palette-tip-title" x-text="paletteHoverTip && paletteHoverTip.label"></span>
+        <span class="palette-tip-body" x-text="paletteHoverTip && paletteHoverTip.description"></span>
+      </div>
     </div>
-
-
 
       <script type="module" src="/src/main.ts"></script>
   </body>

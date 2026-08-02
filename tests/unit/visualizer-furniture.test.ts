@@ -5,10 +5,10 @@ import {
 } from "../../src/visualizer/furniture";
 import type { PlanObject } from "@fp/types";
 
-function floor(name: string): PlanObject {
+function room(name: string): PlanObject {
   return {
-    id: "f-1",
-    type: "floor",
+    id: "r-1",
+    type: "room",
     name,
     notes: "",
     x: 0,
@@ -20,11 +20,17 @@ function floor(name: string): PlanObject {
     visible: true,
     locked: false,
     groupId: null,
+    levelId: "level-1",
+    unitId: "unit-1",
     opacity: 1,
     showDimensions: true,
     dimOffW: { x: 0, y: 0 },
     dimOffH: { x: 0, y: 0 },
   };
+}
+
+function furniture(name: string): PlanObject {
+  return { ...room(name), id: "fu-1", type: "furniture" };
 }
 
 describe("furnitureSpecFromName", () => {
@@ -47,14 +53,14 @@ describe("furnitureSpecFromName", () => {
 
 describe("classifyFloor", () => {
   it("marks parking bays", () => {
-    expect(classifyFloor(floor("Vaga 1 (2,80×5,00)"))).toBe("parking");
+    expect(classifyFloor(room("Vaga 1 (2,80×5,00)"))).toBe("parking");
   });
 
-  it("marks furniture", () => {
-    expect(classifyFloor(floor("Armário"))).toBe("furniture");
+  it("marks furniture type", () => {
+    expect(classifyFloor(furniture("Armário"))).toBe("furniture");
   });
 
   it("marks rooms", () => {
-    expect(classifyFloor(floor("Cozinha"))).toBe("room");
+    expect(classifyFloor(room("Cozinha"))).toBe("room");
   });
 });

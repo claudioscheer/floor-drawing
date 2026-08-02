@@ -10,8 +10,18 @@ export {
   WINDOW_W,
   ROOM_W,
   ROOM_H,
+  FURN_W,
+  FURN_H,
   PLOT_W,
   PLOT_H,
+  FURNITURE_NAME_RE,
+  isFurnitureName,
 } from "./catalog-data";
-export { createObject, getCatalogList, getMinSize } from "./create-object";
+export {
+  createObject,
+  getCatalogList,
+  getMinSize,
+  isObjectType,
+  normalizeObjectType,
+} from "./create-object";
 export { nextId, seedIdCounter, resetIdCounter } from "./ids";
