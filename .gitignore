@@ -4,9 +4,17 @@ tests/output/
 .playwright-mcp/
 package-lock.json
 
+# Local env overrides (defaults work with docker-compose)
+.env
+
+# Prisma generated client (npm run db:generate / postinstall)
+server/generated/
+
 # Local Playwright / design screenshots (not product assets)
 *.png
 !docs/**/*.png
 
 dist/
 
+
+/src/generated/prisma

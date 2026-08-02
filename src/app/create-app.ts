@@ -15,7 +15,6 @@ import {
   getCatalogList,
   seedIdCounter,
 } from "@fp/catalog";
-import { createDemoLayout } from "@fp/demo";
 import {
   doorArcPath,
   doorClosedLeafPath,
@@ -27,14 +26,49 @@ import {
 } from "@fp/doors";
 import { clampOpacity, normalizeRotation, worldAABB } from "@fp/geometry";
 import { setupInteract } from "@fp/interact";
+import {
+  buildPlanDocument,
+  createProject as apiCreateProject,
+  deleteProject as apiDeleteProject,
+  duplicateProject as apiDuplicateProject,
+  getProject,
+  listProjects,
+  normalizePlanDocument,
+  parseProjectIdFromPath,
+  planDocumentToExport,
+  PROJECTS_LIST_PATH,
+  projectPath,
+  updateProject,
+} from "@fp/projects";
 import { snapPosition } from "@fp/snap";
 import { clamp, formatArea, formatLength, pxToUnit, unitToPx } from "@fp/units";
 import type { FloorPlanApp } from "./types";
-import type { ObjectType } from "@fp/types";
+import type { ObjectType, PlanDocument } from "@fp/types";
 import { getAppInstance, setAppInstance } from "./instance";
 
-/** One-time demo seed gate (module scope — not a window global). */
-let bootedFlag = false;
+/** Debounce window for project auto-save (ms). */
+const SAVE_DEBOUNCE_MS = 1500;
+
+/**
+ * Trigger a browser JSON file download.
+ * @param payload - JSON-serializable payload
+ * @param filenameBase - Base filename without extension
+ */
+function downloadJson(payload: unknown, filenameBase: string): void {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download =
+    (filenameBase || "floor-plan").replace(/\s+/g, "-").toLowerCase() +
+    ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * Alpine component factory for the floor plan editor.
@@ -57,7 +91,7 @@ export function floorPlanApp(): FloorPlanApp {
     minZoom: 0.15,
     maxZoom: 3,
 
-    planName: "Multifamily 4 units + parking",
+    planName: "Untitled project",
     /** select | pan | terrain | floor | wall | window | door */
     activeTool: "select",
 
@@ -65,6 +99,17 @@ export function floorPlanApp(): FloorPlanApp {
     viewMode: "layout",
     vizLocked: false,
     _visualizer: null,
+
+    /** projects browser vs editor */
+    screen: "projects",
+    projectId: null,
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    saveStatus: "idle",
+    _saveTimer: null,
+    _saveInFlight: null,
+    _bootstrapped: false,
 
     /** Master switch: when false, hide all size labels regardless of per-object setting */
     showDimensionsGlobal: false,
@@ -138,29 +183,27 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     init() {
-      // Seed demo layout once (bump key when real-world scale / demo changes)
-      if (!bootedFlag) {
-        bootedFlag = true;
-        // Front: ped portal left of building; one car portão on aisle
-        const demo = createDemoLayout();
-        this.objects = demo.objects || demo;
-        this.groups = demo.groups || [];
-        this.groupSeq = demo.groupSeq || this.groups.length + 1;
-        seedIdCounter(this.objects);
-        this.selectedIds = [];
-      }
-
       // Stable handle for interact.js (and tests)
       setAppInstance(this as FloorPlanApp);
 
-      // Wire interact.js once Alpine + DOM are ready; frame the demo plan
+      // Wire interact once; project list is the default screen (empty plan until open)
+      if (!this._bootstrapped) {
+        this._bootstrapped = true;
+        this.objects = [];
+        this.groups = [];
+        this.groupSeq = 1;
+        this.selectedIds = [];
+        this.selectedId = null;
+        void this.bootstrapFromUrl();
+      }
+
       this.$nextTick(() => {
         setupInteract(() => getAppInstance());
-        this.fitToContent();
       });
 
-      // Space for pan mode
+      // Space for pan mode (editor only)
       window.addEventListener("keydown", (e) => {
+        if (this.screen !== "editor") return;
         if (e.code === "Space" && !this.isTypingTarget(e.target)) {
           this.panState.spaceDown = true;
           this.$refs.viewport?.classList.add("is-panning");
@@ -175,6 +218,424 @@ export function floorPlanApp(): FloorPlanApp {
           }
         }
       });
+
+      // Browser back/forward: sync editor vs list from the URL
+      window.addEventListener("popstate", () => {
+        void this.syncFromLocation();
+      });
+
+      // Flush pending save on tab close / refresh
+      window.addEventListener("beforeunload", () => {
+        if (this.projectId && (this.saveStatus === "dirty" || this._saveTimer)) {
+          // best-effort: kick a save; browsers limit async work here
+          void this.flushSave();
+        }
+      });
+    },
+
+    /**
+     * First paint: open `/projects/:uuid` if present, else show the list.
+     */
+    async bootstrapFromUrl() {
+      const id = parseProjectIdFromPath(window.location.pathname);
+      if (id) {
+        await this.openProject(id, { skipUrl: true });
+        // If open failed, openProject already sent us to the list
+        return;
+      }
+      // Unknown deep paths → normalize to home
+      if (
+        window.location.pathname !== PROJECTS_LIST_PATH &&
+        window.location.pathname !== ""
+      ) {
+        this.replaceUrl(PROJECTS_LIST_PATH, { screen: "projects" });
+      }
+      await this.loadProjects();
+      this.setDocumentTitle(null);
+    },
+
+    /**
+     * React to popstate / external URL changes.
+     */
+    async syncFromLocation() {
+      const id = parseProjectIdFromPath(window.location.pathname);
+      if (id) {
+        if (this.projectId === id && this.screen === "editor") return;
+        if (this.projectId && this.projectId !== id) {
+          await this.flushSave();
+        }
+        await this.openProject(id, { skipUrl: true });
+        return;
+      }
+      if (this.screen === "projects" && !this.projectId) return;
+      await this.backToProjects({ skipUrl: true });
+    },
+
+    /**
+     * Push or replace the browser URL for a project editor.
+     * @param id - Project UUID
+     * @param replace - Use replaceState when true
+     */
+    setProjectUrl(id, replace = false) {
+      const path = projectPath(id);
+      if (window.location.pathname === path) return;
+      const state = { screen: "editor", projectId: id };
+      if (replace) this.replaceUrl(path, state);
+      else this.pushUrl(path, state);
+    },
+
+    /**
+     * Set the browser URL to the projects list.
+     * @param replace - Use replaceState when true
+     */
+    setProjectsListUrl(replace = false) {
+      const path = PROJECTS_LIST_PATH;
+      if (
+        window.location.pathname === path ||
+        window.location.pathname === ""
+      ) {
+        return;
+      }
+      const state = { screen: "projects", projectId: null };
+      if (replace) this.replaceUrl(path, state);
+      else this.pushUrl(path, state);
+    },
+
+    pushUrl(path, state) {
+      window.history.pushState(state, "", path);
+    },
+
+    replaceUrl(path, state) {
+      window.history.replaceState(state, "", path);
+    },
+
+    /**
+     * Update the tab title for the open plan.
+     * @param name - Plan name or null for the list
+     */
+    setDocumentTitle(name) {
+      if (name && String(name).trim()) {
+        document.title = `${String(name).trim()} · Floor Plan Editor`;
+      } else {
+        document.title = "Floor Plan Editor";
+      }
+    },
+
+    /**
+     * Load project list for the browser screen.
+     */
+    async loadProjects() {
+      this.projectsLoading = true;
+      this.projectsError = null;
+      try {
+        this.projects = await listProjects();
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Failed to load projects";
+        this.projectsError = msg;
+        this.projects = [];
+      } finally {
+        this.projectsLoading = false;
+      }
+    },
+
+    /**
+     * Create an empty project and open the editor.
+     */
+    async createProject() {
+      this.projectsError = null;
+      try {
+        const project = await apiCreateProject();
+        this.applyPlanDocument(normalizePlanDocument(project.document));
+        this.planName = project.name;
+        this.projectId = project.id;
+        this.historyPast = [];
+        this.historyFuture = [];
+        this.saveStatus = "saved";
+        this.screen = "editor";
+        this.viewMode = "layout";
+        this.setProjectUrl(project.id);
+        this.setDocumentTitle(project.name);
+        this.framePlanAfterShow();
+      } catch (err) {
+        this.projectsError =
+          err instanceof Error ? err.message : "Failed to create project";
+      }
+    },
+
+    /**
+     * Open an existing project in the editor.
+     * @param id - Project UUID
+     * @param opts.skipUrl - When true, do not push/replace history (boot / popstate)
+     */
+    async openProject(id, opts = {}) {
+      this.projectsError = null;
+      try {
+        const project = await getProject(id);
+        this.applyPlanDocument(normalizePlanDocument(project.document));
+        this.planName = project.name;
+        this.projectId = project.id;
+        this.historyPast = [];
+        this.historyFuture = [];
+        this.saveStatus = "saved";
+        this.screen = "editor";
+        this.viewMode = "layout";
+        if (!opts.skipUrl) this.setProjectUrl(project.id);
+        this.setDocumentTitle(project.name);
+        this.framePlanAfterShow();
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Failed to open project";
+        this.projectsError = msg;
+        this.projectId = null;
+        this.screen = "projects";
+        this.setProjectsListUrl(true);
+        this.setDocumentTitle(null);
+        await this.loadProjects();
+      }
+    },
+
+    /**
+     * Fit the plan after the editor screen becomes visible.
+     * x-show can leave the viewport at 0 size for one frame; retry until laid out.
+     */
+    framePlanAfterShow() {
+      let attempts = 0;
+      const run = () => {
+        attempts += 1;
+        const viewport = this.$refs && this.$refs.viewport;
+        const w = viewport ? viewport.getBoundingClientRect().width : 0;
+        if (w > 40 || attempts >= 12) {
+          this.fitToContent();
+          return;
+        }
+        requestAnimationFrame(run);
+      };
+      this.$nextTick(() => requestAnimationFrame(run));
+    },
+
+    /**
+     * Duplicate a project and refresh the list.
+     * @param id - Source project UUID
+     */
+    async duplicateProject(id) {
+      this.projectsError = null;
+      try {
+        await apiDuplicateProject(id);
+        await this.loadProjects();
+      } catch (err) {
+        this.projectsError =
+          err instanceof Error ? err.message : "Failed to duplicate project";
+      }
+    },
+
+    /**
+     * Delete a project after confirm.
+     * @param id - Project UUID
+     */
+    async deleteProject(id) {
+      const row = this.projects.find((p) => p.id === id);
+      const label = row?.name || "this project";
+      if (!window.confirm(`Delete “${label}”? This cannot be undone.`)) return;
+      this.projectsError = null;
+      try {
+        await apiDeleteProject(id);
+        if (this.projectId === id) {
+          this.projectId = null;
+          this.screen = "projects";
+          this.setProjectsListUrl(true);
+          this.setDocumentTitle(null);
+        }
+        await this.loadProjects();
+      } catch (err) {
+        this.projectsError =
+          err instanceof Error ? err.message : "Failed to delete project";
+      }
+    },
+
+    /**
+     * Export a project from the list as a JSON file download.
+     * @param id - Project UUID
+     */
+    async exportProjectFromList(id) {
+      this.projectsError = null;
+      try {
+        const project = await getProject(id);
+        const payload = planDocumentToExport(
+          project.name,
+          normalizePlanDocument(project.document)
+        );
+        downloadJson(payload, project.name || "floor-plan");
+      } catch (err) {
+        this.projectsError =
+          err instanceof Error ? err.message : "Failed to export project";
+      }
+    },
+
+    /**
+     * Leave the editor, flush save, and show the project list.
+     * @param opts.skipUrl - When true, do not push history (popstate)
+     */
+    async backToProjects(opts = {}) {
+      if (this.viewMode === "visualize") {
+        this.stopVisualizer();
+        this.viewMode = "layout";
+      }
+      await this.flushSave();
+      this.projectId = null;
+      this.screen = "projects";
+      this.saveStatus = "idle";
+      if (!opts.skipUrl) this.setProjectsListUrl();
+      this.setDocumentTitle(null);
+      await this.loadProjects();
+    },
+
+    /** Debounced save when the plan name is edited. */
+    onPlanNameInput() {
+      if (!this.projectId) return;
+      this.saveStatus = "dirty";
+      this.setDocumentTitle(this.planName);
+      this.scheduleSave();
+    },
+
+    /**
+     * Schedule a debounced PUT of the current project.
+     */
+    scheduleSave() {
+      if (!this.projectId) return;
+      this.saveStatus = "dirty";
+      if (this._saveTimer) clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => {
+        this._saveTimer = null;
+        void this.flushSave();
+      }, SAVE_DEBOUNCE_MS);
+    },
+
+    /**
+     * Immediately persist the open project (awaits in-flight work).
+     */
+    async flushSave() {
+      if (this._saveTimer) {
+        clearTimeout(this._saveTimer);
+        this._saveTimer = null;
+      }
+      if (!this.projectId) return;
+      if (this._saveInFlight) {
+        await this._saveInFlight;
+      }
+      // If nothing pending after prior save, skip when already clean
+      if (this.saveStatus === "saved" || this.saveStatus === "idle") return;
+
+      const id = this.projectId;
+      const name = this.planName || "Untitled project";
+      const document = this.buildPlanDocument();
+      this.saveStatus = "saving";
+
+      const run = (async () => {
+        try {
+          await updateProject(id, { name, document });
+          // Only mark saved if still open and no newer edit queued mid-flight
+          if (this.projectId === id) {
+            if (this._saveTimer || this.saveStatus === "dirty") {
+              // leave dirty; pending timer will flush again
+            } else {
+              this.saveStatus = "saved";
+            }
+          }
+        } catch {
+          if (this.projectId === id) {
+            this.saveStatus = "error";
+          }
+        }
+      })();
+
+      this._saveInFlight = run;
+      try {
+        await run;
+      } finally {
+        if (this._saveInFlight === run) this._saveInFlight = null;
+      }
+    },
+
+    /**
+     * Snapshot editor state into a persistable document.
+     * @returns PlanDocument
+     */
+    buildPlanDocument() {
+      return buildPlanDocument({
+        objects: this.objects,
+        groups: this.groups,
+        groupSeq: this.groupSeq,
+        labelOffsets: this.labelOffsets,
+        showDimensionsGlobal: this.showDimensionsGlobal,
+        zoom: this.zoom,
+        panX: this.panX,
+        panY: this.panY,
+      });
+    },
+
+    /**
+     * Replace editor state from a loaded document.
+     * @param doc - Plan document
+     */
+    applyPlanDocument(doc: PlanDocument) {
+      const data = normalizePlanDocument(doc);
+      this._historyPaused = true;
+      try {
+        this.objects = Array.isArray(data.objects) ? data.objects : [];
+        this.groups = Array.isArray(data.groups) ? data.groups : [];
+        this.groupSeq = Number(data.groupSeq) || 1;
+        this.labelOffsets =
+          data.labelOffsets && typeof data.labelOffsets === "object"
+            ? data.labelOffsets
+            : {};
+        this.showDimensionsGlobal = !!data.showDimensionsGlobal;
+        if (typeof data.zoom === "number") this.zoom = data.zoom;
+        if (typeof data.panX === "number") this.panX = data.panX;
+        if (typeof data.panY === "number") this.panY = data.panY;
+        this.selectedId = null;
+        this.selectedIds = [];
+        this.snapGuides = { v: null, h: null, active: false };
+        seedIdCounter(this.objects);
+      } finally {
+        this.$nextTick(() => {
+          this._historyPaused = false;
+        });
+      }
+    },
+
+    /** Label for the save-status chip. */
+    saveStatusLabel() {
+      switch (this.saveStatus) {
+        case "dirty":
+          return "Unsaved changes…";
+        case "saving":
+          return "Saving…";
+        case "saved":
+          return "Saved";
+        case "error":
+          return "Save failed";
+        default:
+          return "";
+      }
+    },
+
+    /**
+     * Format an ISO timestamp for the project list.
+     * @param iso - ISO date string
+     * @returns Locale short datetime
+     */
+    formatProjectDate(iso) {
+      if (!iso) return "";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+      } catch {
+        return iso;
+      }
     },
 
     /**
@@ -738,36 +1199,11 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     exportPlan() {
-      const payload = {
-        name: this.planName,
-        exportedAt: new Date().toISOString(),
-        groups: this.groups,
-        objects: this.objects.map((o) => {
-          const off = this.labelOffsets[o.id] || {
-            w: { x: 0, y: 0 },
-            h: { x: 0, y: 0 },
-            n: { x: 0, y: 0 },
-          };
-          return {
-            ...o,
-            dimOffW: { ...off.w },
-            dimOffH: { ...off.h },
-            dimOffN: { ...(off.n || { x: 0, y: 0 }) },
-          };
-        }),
-        labelOffsets: JSON.parse(JSON.stringify(this.labelOffsets)),
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = (this.planName || "floor-plan").replace(/\s+/g, "-").toLowerCase() + ".json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const payload = planDocumentToExport(
+        this.planName,
+        this.buildPlanDocument()
+      );
+      downloadJson(payload, this.planName || "floor-plan");
     },
 
     paletteGhostStyle() {
@@ -1635,6 +2071,8 @@ export function floorPlanApp(): FloorPlanApp {
         this.historyPast.shift();
       }
       this.historyFuture = [];
+      // Auto-save after user edits (not during apply/load)
+      if (this.projectId) this.scheduleSave();
     },
 
     restoreSnapshot(snap) {
@@ -1683,6 +2121,7 @@ export function floorPlanApp(): FloorPlanApp {
       const prev = this.historyPast.pop();
       this.historyFuture.push(current);
       this.restoreSnapshot(prev);
+      if (this.projectId) this.scheduleSave();
     },
 
     redo() {
@@ -1691,6 +2130,7 @@ export function floorPlanApp(): FloorPlanApp {
       const next = this.historyFuture.pop();
       this.historyPast.push(current);
       this.restoreSnapshot(next);
+      if (this.projectId) this.scheduleSave();
     },
 
     patchObject(id, patch) {
@@ -1807,6 +2247,8 @@ export function floorPlanApp(): FloorPlanApp {
     },
 
     onKeydown(e) {
+      // Project browser: do not mutate plan with editor shortcuts
+      if (this.screen !== "editor") return;
       const mod = e.metaKey || e.ctrlKey;
       // Let inputs keep native text undo while focused
       if (mod && !this.isTypingTarget(e.target)) {

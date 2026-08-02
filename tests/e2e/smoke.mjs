@@ -55,14 +55,62 @@ async function main() {
 
     // --- mount ---
     const mounted = await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
       return {
         title: document.title,
-        hasApp: !!((function(){ const root = document.querySelector("#app"); const app = root && window.Alpine ? window.Alpine.$data(root) : null; return !!(app && Array.isArray(app.objects)); })()),
-        objectCount: (function(){ const root = document.querySelector("#app"); const app = root && window.Alpine ? window.Alpine.$data(root) : null; return app ? app.objects.length : 0; })(),
+        hasApp: !!(app && Array.isArray(app.objects)),
+        screen: app ? app.screen : null,
+        hasProjectsUi: !!document.querySelector(".projects-screen"),
+        objectCount: app ? app.objects.length : 0,
       };
     });
     if (!mounted.hasApp) throw new Error("Alpine floorPlanApp not mounted on #app");
     pass(results, "app-mount", mounted);
+
+    // --- projects browser on boot ---
+    const projectsBoot = await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      const screen = document.querySelector(".projects-screen");
+      const title = document.querySelector(".projects-title");
+      const newBtn = Array.from(document.querySelectorAll(".projects-screen .btn")).find(
+        (b) => /new project/i.test(b.textContent || "")
+      );
+      return {
+        ok:
+          app &&
+          app.screen === "projects" &&
+          !!screen &&
+          !!(title && /projects/i.test(title.textContent || "")) &&
+          !!newBtn,
+        screen: app && app.screen,
+        hasTitle: !!(title && title.textContent),
+      };
+    });
+    if (!projectsBoot.ok) fail(results, "projects-boot", JSON.stringify(projectsBoot));
+    else pass(results, "projects-boot", projectsBoot);
+    await page.screenshot({ path: path.join(OUT_DIR, "projects-list.png") });
+
+    // --- enter editor without API (local session for canvas smoke) ---
+    await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      if (!app) return;
+      // Keep projectId null so auto-save does not hit the API during pure UI smoke
+      app.projectId = null;
+      app.screen = "editor";
+      app.planName = "E2E Plan";
+      app.objects = [];
+      app.groups = [];
+      app.groupSeq = 1;
+      app.selectedId = null;
+      app.selectedIds = [];
+      app.historyPast = [];
+      app.historyFuture = [];
+      app.saveStatus = "idle";
+    });
+    await page.waitForTimeout(80);
 
     // --- tools palette visible ---
     const toolsLayout = await page.evaluate(() => {
@@ -89,24 +137,28 @@ async function main() {
     if (!toolsLayout.ok) fail(results, "tools-visible", JSON.stringify(toolsLayout));
     else pass(results, "tools-visible", toolsLayout);
 
-    // --- layers present ---
+    // --- layers panel present (may be empty before we place objects) ---
     const layersOk = await page.evaluate(() => {
       const list = document.querySelector(".layers-list");
       const panel = document.querySelector(".layers-panel");
-      return !!(list && panel && panel.clientHeight > 80 && list.querySelectorAll(".layer-row").length > 0);
+      return !!(list && panel && panel.clientHeight > 80);
     });
-    if (!layersOk) fail(results, "layers-present", "layers list empty or zero height");
+    if (!layersOk) fail(results, "layers-present", "layers list missing or zero height");
     else pass(results, "layers-present");
 
     await page.screenshot({ path: path.join(OUT_DIR, "ui-shell.png") });
 
-    // --- selection focus ---
+    // --- selection focus (place a floor first; no demo seed on boot) ---
     const selectFocus = await page.evaluate(async () => {
       const app = (function(){ const root = document.querySelector("#app"); return root && window.Alpine ? window.Alpine.$data(root) : null; })();
-      const floor =
-        app.objects.find((o) => o.name && String(o.name).includes("Estar")) ||
-        app.objects.find((o) => o.type === "floor");
-      if (!floor) return { ok: false, reason: "no floor" };
+      const floor = app.createObject("floor", {
+        x: 200,
+        y: 200,
+        width: app.m(4),
+        height: app.m(3),
+        name: "E2E Estar",
+      });
+      app.objects = app.objects.concat([floor]);
       app.selectObject(floor.id);
       await new Promise((r) => setTimeout(r, 80));
       const el = document.querySelector('.fp-object[data-id="' + floor.id + '"]');
@@ -273,9 +325,15 @@ async function main() {
 
     await page.screenshot({ path: path.join(OUT_DIR, "ui-after-smoke.png") });
 
-    // console / page errors
+    // console / page errors (API may be down during pure UI smoke)
     const realErrors = results.errors.filter(
-      (e) => !/favicon/i.test(e.message || "")
+      (e) =>
+        !/favicon/i.test(e.message || "") &&
+        !/\/api\/projects/i.test(e.message || "") &&
+        !/Failed to fetch/i.test(e.message || "") &&
+        !/NetworkError/i.test(e.message || "") &&
+        !/Load projects failed/i.test(e.message || "") &&
+        !/List projects failed/i.test(e.message || "")
     );
     if (realErrors.length) fail(results, "zero-errors", JSON.stringify(realErrors));
     else pass(results, "zero-errors", { count: 0 });

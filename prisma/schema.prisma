@@ -1,0 +1,24 @@
+// Floor plan editor — Postgres schema (Prisma)
+// Migrations: npm run db:migrate
+// Client generate: npm run db:generate
+
+generator client {
+  provider = "prisma-client"
+  output   = "../server/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A saved floor-plan project. document is the full PlanDocument JSON blob.
+model Project {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  document  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([updatedAt(sort: Desc)], map: "projects_updated_at_idx")
+  @@map("projects")
+}

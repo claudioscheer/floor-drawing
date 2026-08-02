@@ -203,6 +203,42 @@ export interface PlanExport {
   labelOffsets: LabelOffsetsMap;
 }
 
+/**
+ * Persisted plan body stored in the projects API (JSONB).
+ * Selection is intentionally omitted so reopen does not restore a stale pick.
+ * Must match server/src/types.ts PlanDocument.
+ */
+export interface PlanDocument {
+  objects: PlanObject[];
+  groups: Group[];
+  groupSeq: number;
+  labelOffsets: LabelOffsetsMap;
+  showDimensionsGlobal: boolean;
+  /** Optional viewport (restored when present). */
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+}
+
+/** List-row project metadata from GET /api/projects. */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Full project including document from GET /api/projects/:id. */
+export interface Project extends ProjectSummary {
+  document: PlanDocument;
+}
+
+/** App chrome mode: project browser vs floor-plan editor. */
+export type AppScreen = "projects" | "editor";
+
+/** Debounced project save indicator. */
+export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+
 /** History snapshot (serialized JSON string of this shape). */
 export interface HistorySnapshotData {
   objects: PlanObject[];

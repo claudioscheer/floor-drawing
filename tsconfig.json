@@ -28,9 +28,16 @@
       "@fp/snap": ["./src/snap/index.ts"],
       "@fp/interact": ["./src/interact/index.ts"],
       "@fp/visualizer": ["./src/visualizer/index.ts"],
+      "@fp/projects": ["./src/projects/index.ts"],
       "@fp/app": ["./src/app/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vite.config.ts", "vitest.config.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "server/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "server/generated"]
 }

@@ -11,6 +11,7 @@ const aliases = {
   "@fp/snap": path.resolve(import.meta.dirname, "src/snap/index.ts"),
   "@fp/interact": path.resolve(import.meta.dirname, "src/interact/index.ts"),
   "@fp/visualizer": path.resolve(import.meta.dirname, "src/visualizer/index.ts"),
+  "@fp/projects": path.resolve(import.meta.dirname, "src/projects/index.ts"),
   "@fp/app": path.resolve(import.meta.dirname, "src/app/index.ts"),
 };
 

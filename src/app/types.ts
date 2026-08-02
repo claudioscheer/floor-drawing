@@ -4,6 +4,7 @@
  */
 
 import type {
+  AppScreen,
   CatalogListItem,
   DimAxis,
   DoorHingeRect,
@@ -17,8 +18,11 @@ import type {
   ObjectType,
   PaletteDragState,
   PanState,
+  PlanDocument,
   PlanObject,
   PlanObjectOverrides,
+  ProjectSummary,
+  SaveStatus,
   SelectOptions,
   SnapGuides,
   StyleMap,
@@ -77,6 +81,17 @@ export interface FloorPlanApp extends AlpineMagic {
   _objectDragMove?: (ev: PointerEvent) => void;
   _objectDragUp?: () => void;
 
+  /** projects browser vs editor */
+  screen: AppScreen;
+  projectId: string | null;
+  projects: ProjectSummary[];
+  projectsLoading: boolean;
+  projectsError: string | null;
+  saveStatus: SaveStatus;
+  _saveTimer: ReturnType<typeof setTimeout> | null;
+  _saveInFlight: Promise<void> | null;
+  _bootstrapped: boolean;
+
   readonly selected: PlanObject | null;
   readonly isPlaceTool: boolean;
   readonly isPanTool: boolean;
@@ -86,6 +101,30 @@ export interface FloorPlanApp extends AlpineMagic {
   readonly canRedo: boolean;
 
   init(): void;
+  bootstrapFromUrl(): Promise<void>;
+  syncFromLocation(): Promise<void>;
+  setProjectUrl(id: string, replace?: boolean): void;
+  setProjectsListUrl(replace?: boolean): void;
+  pushUrl(path: string, state: unknown): void;
+  replaceUrl(path: string, state: unknown): void;
+  setDocumentTitle(name: string | null): void;
+  loadProjects(): Promise<void>;
+  createProject(): Promise<void>;
+  openProject(
+    id: string,
+    opts?: { skipUrl?: boolean }
+  ): Promise<void>;
+  duplicateProject(id: string): Promise<void>;
+  deleteProject(id: string): Promise<void>;
+  exportProjectFromList(id: string): Promise<void>;
+  backToProjects(opts?: { skipUrl?: boolean }): Promise<void>;
+  onPlanNameInput(): void;
+  scheduleSave(): void;
+  flushSave(): Promise<void>;
+  buildPlanDocument(): PlanDocument;
+  applyPlanDocument(doc: PlanDocument): void;
+  saveStatusLabel(): string;
+  formatProjectDate(iso: string): string;
   isTypingTarget(el: EventTarget | null): boolean;
   worldStyle(): StyleMap;
   viewportGridStyle(): StyleMap;

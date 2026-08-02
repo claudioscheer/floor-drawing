@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: floor-drawing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: floor
+      POSTGRES_PASSWORD: floor
+      POSTGRES_DB: floor_drawing
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U floor -d floor_drawing"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

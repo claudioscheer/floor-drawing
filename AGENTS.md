@@ -18,11 +18,14 @@ Rules for any agent or human working in this repository. Follow them strictly.
 | `@fp/geometry` | `src/geometry/` | Rotation, opacity, AABB |
 | `@fp/catalog` | `src/catalog/` | CATALOG, createObject, ids, SNAP_PARTNERS |
 | `@fp/doors` | `src/doors/` | Door geometry + SVG paths |
-| `@fp/demo` | `src/demo/` | Demo seed layout |
+| `@fp/demo` | `src/demo/` | Demo seed layout (tests / optional templates) |
+| `@fp/projects` | `src/projects/` | Projects API client + plan document helpers |
 | `@fp/snap` | `src/snap/` | Edge/grid snap (pure) |
 | `@fp/interact` | `src/interact/` | interact.js resize wiring |
 | `@fp/visualizer` | `src/visualizer/` | Three.js 3D walkthrough (Visualize mode) |
 | `@fp/app` | `src/app/` | Alpine factory + app surface types |
+| (no alias) | `server/` | Local Node API (Hono + Prisma → Postgres) |
+| (no alias) | `prisma/` | Prisma schema + versioned SQL migrations |
 
 ### Dependency direction (must not reverse)
 
@@ -30,15 +33,18 @@ Rules for any agent or human working in this repository. Follow them strictly.
 types ← units ← geometry ← catalog ← doors
                               ↑
                             demo
+types ← projects
 types ← geometry ← snap
-app → catalog | snap | doors | demo | geometry | units | interact | visualizer
+app → catalog | snap | doors | demo | geometry | units | interact | visualizer | projects
 interact → snap | catalog | geometry | types
 visualizer → types | units | geometry | three
 main → app
+server/  (standalone Node process; does not import @fp/*)
 ```
 
-- Pure libraries (`units`, `geometry`, `catalog`, `doors`, `demo`, `snap`) **must not** import DOM/`window`/`document`.
+- Pure libraries (`units`, `geometry`, `catalog`, `doors`, `demo`, `snap`, `projects`) **must not** import DOM/`window`/`document`.
 - Only `app`, `interact`, `visualizer`, and `main` may touch the DOM.
+- Projects persist via `server/` + Postgres (`docker compose`). Schema is owned by **Prisma Migrate** (`prisma/schema.prisma`, `prisma/migrations/`). No auth for this local experiment.
 
 ## TypeScript rules (strict)
 
@@ -81,12 +87,18 @@ main → app
 ## Commands
 
 ```bash
-npm run dev          # Vite dev server :8765
-npm run build        # typecheck + production build
-npm run preview      # serve dist :8765
-npm run typecheck    # tsc --noEmit
-npm run test         # vitest unit
-npm run test:e2e     # Playwright smoke (server must be up)
+npm run db:up          # Postgres via Docker Compose :5432
+npm run db:migrate     # Apply Prisma migrations (deploy)
+npm run db:migrate:dev # Create/apply migrations in development
+npm run db:generate    # Generate Prisma Client
+npm run db:studio      # Prisma Studio UI
+npm run server         # Projects API :3001
+npm run dev            # Vite dev server :8765 (proxies /api → :3001)
+npm run build          # typecheck + production build
+npm run preview        # serve dist :8765
+npm run typecheck      # tsc --noEmit
+npm run test           # vitest unit
+npm run test:e2e       # Playwright smoke (Vite must be up)
 ```
 
 ## What not to do

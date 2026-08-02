@@ -13,16 +13,173 @@
       x-init="init()"
       @keydown.window="onKeydown($event)"
     >
-      <!-- Top app bar -->
-      <header class="app-header">
+      <!-- Project browser (default screen) -->
+      <div
+        class="projects-screen"
+        x-show="screen === 'projects'"
+        x-cloak
+        role="main"
+        aria-label="Projects"
+      >
+        <div class="projects-shell">
+          <header class="projects-header">
+            <div class="projects-brand">
+              <span class="brand-mark brand-mark-lg" aria-hidden="true"></span>
+              <div>
+                <h1 class="projects-title">Floor plans</h1>
+                <p class="projects-subtitle">
+                  Open a plan or start a new one. Changes auto-save as you work.
+                </p>
+              </div>
+            </div>
+            <div class="projects-header-actions">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                @click="loadProjects()"
+                :disabled="projectsLoading"
+                title="Refresh project list"
+              >
+                Refresh
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="createProject()"
+                :disabled="projectsLoading"
+              >
+                New project
+              </button>
+            </div>
+          </header>
+
+          <div
+            class="projects-error"
+            x-show="projectsError"
+            x-text="projectsError"
+            role="alert"
+          ></div>
+
+          <div class="projects-body">
+            <div class="projects-loading" x-show="projectsLoading">
+              <span class="projects-spinner" aria-hidden="true"></span>
+              Loading projects…
+            </div>
+
+            <div
+              class="projects-empty"
+              x-show="!projectsLoading && !projectsError && projects.length === 0"
+            >
+              <div class="projects-empty-icon" aria-hidden="true">
+                <span class="projects-empty-grid"></span>
+              </div>
+              <p class="projects-empty-title">No projects yet</p>
+              <p class="projects-empty-copy">
+                Create a project to start drawing. Your work is saved locally
+                so you can pick up where you left off.
+              </p>
+              <button
+                type="button"
+                class="btn btn-primary"
+                @click="createProject()"
+              >
+                New project
+              </button>
+            </div>
+
+            <div
+              class="projects-list-meta"
+              x-show="!projectsLoading && projects.length > 0"
+            >
+              <span
+                class="projects-count"
+                x-text="projects.length + (projects.length === 1 ? ' project' : ' projects')"
+              ></span>
+            </div>
+
+            <ul
+              class="projects-list"
+              x-show="!projectsLoading && projects.length > 0"
+              role="list"
+            >
+              <template x-for="project in projects" :key="project.id">
+                <li class="project-card">
+                  <button
+                    type="button"
+                    class="project-card-main"
+                    @click="openProject(project.id)"
+                  >
+                    <span class="project-card-thumb" aria-hidden="true">
+                      <span class="project-card-thumb-plan"></span>
+                    </span>
+                    <span class="project-card-copy">
+                      <span class="project-card-name" x-text="project.name"></span>
+                      <span class="project-card-meta">
+                        Updated
+                        <span x-text="formatProjectDate(project.updatedAt)"></span>
+                      </span>
+                    </span>
+                  </button>
+                  <div class="project-card-actions" role="group" :aria-label="'Actions for ' + project.name">
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      @click="openProject(project.id)"
+                    >
+                      Open
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="duplicateProject(project.id)"
+                      title="Duplicate project"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      @click="exportProjectFromList(project.id)"
+                      title="Export as JSON"
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-danger btn-sm"
+                      @click="deleteProject(project.id)"
+                      title="Delete project"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top app bar (editor) -->
+      <header class="app-header" x-show="screen === 'editor'" x-cloak>
         <div class="header-left">
           <div class="brand">
-            <span class="brand-mark" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm projects-back"
+              @click="backToProjects()"
+              title="Back to projects"
+            >
+              <span class="projects-back-chevron" aria-hidden="true">←</span>
+              Projects
+            </button>
+            <span class="header-divider" aria-hidden="true"></span>
             <div class="brand-text">
               <input
                 class="plan-name"
                 type="text"
                 x-model="planName"
+                @input="onPlanNameInput()"
                 aria-label="Plan name"
               />
               <span class="plan-meta" x-text="planMeta()"></span>
@@ -57,6 +214,13 @@
         </div>
 
         <div class="header-actions">
+          <span
+            class="save-status"
+            :class="'save-status--' + saveStatus"
+            x-text="saveStatusLabel()"
+            x-show="saveStatus !== 'idle'"
+            role="status"
+          ></span>
           <div class="history-btns" role="group" aria-label="History">
             <button
               type="button"
@@ -105,7 +269,12 @@
         </div>
       </header>
 
-      <div class="app-body" :class="{ 'is-visualize': viewMode === 'visualize' }">
+      <div
+        class="app-body"
+        x-show="screen === 'editor'"
+        x-cloak
+        :class="{ 'is-visualize': viewMode === 'visualize' }"
+      >
         <!-- Left: tools + layers -->
         <aside class="panel panel-left" aria-label="Tools and layers" x-show="viewMode === 'layout'">
           <div class="panel-header">
