@@ -23,12 +23,17 @@ import type {
   SnapGuides,
   StyleMap,
 } from "@fp/types";
+import type { VisualizerHandle } from "@fp/visualizer";
+
+/** Editor chrome mode: 2D layout vs 3D walkthrough. */
+export type ViewMode = "layout" | "visualize";
 
 /** Alpine magic properties injected at runtime (optional on the factory return). */
 export interface AlpineMagic {
   $nextTick?: (fn: () => void) => void;
   $refs?: {
     viewport?: HTMLElement;
+    vizMount?: HTMLElement;
   };
 }
 
@@ -49,6 +54,11 @@ export interface FloorPlanApp extends AlpineMagic {
   maxZoom: number;
   planName: string;
   activeTool: EditorTool;
+  /** layout = 2D editor; visualize = Three.js walkthrough */
+  viewMode: ViewMode;
+  /** Pointer-lock active inside visualizer */
+  vizLocked: boolean;
+  _visualizer: VisualizerHandle | null;
   showDimensionsGlobal: boolean;
   labelOffsets: LabelOffsetsMap;
   historyPast: string[];
@@ -130,6 +140,9 @@ export interface FloorPlanApp extends AlpineMagic {
   planMeta(): string;
   floorAreaLabel(): string;
   setTool(tool: EditorTool | string): void;
+  setViewMode(mode: ViewMode | string): void;
+  startVisualizer(): Promise<void>;
+  stopVisualizer(): void;
   exportPlan(): void;
   paletteGhostStyle(): StyleMap;
   pickObjectAtClient(clientX: number, clientY: number): string | null;

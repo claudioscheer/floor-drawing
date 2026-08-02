@@ -21,6 +21,7 @@ Rules for any agent or human working in this repository. Follow them strictly.
 | `@fp/demo` | `src/demo/` | Demo seed layout |
 | `@fp/snap` | `src/snap/` | Edge/grid snap (pure) |
 | `@fp/interact` | `src/interact/` | interact.js resize wiring |
+| `@fp/visualizer` | `src/visualizer/` | Three.js 3D walkthrough (Visualize mode) |
 | `@fp/app` | `src/app/` | Alpine factory + app surface types |
 
 ### Dependency direction (must not reverse)
@@ -30,13 +31,14 @@ types ← units ← geometry ← catalog ← doors
                               ↑
                             demo
 types ← geometry ← snap
-app → catalog | snap | doors | demo | geometry | units | interact
+app → catalog | snap | doors | demo | geometry | units | interact | visualizer
 interact → snap | catalog | geometry | types
+visualizer → types | units | geometry | three
 main → app
 ```
 
 - Pure libraries (`units`, `geometry`, `catalog`, `doors`, `demo`, `snap`) **must not** import DOM/`window`/`document`.
-- Only `app`, `interact`, and `main` may touch the DOM.
+- Only `app`, `interact`, `visualizer`, and `main` may touch the DOM.
 
 ## TypeScript rules (strict)
 

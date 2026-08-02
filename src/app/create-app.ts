@@ -61,6 +61,11 @@ export function floorPlanApp(): FloorPlanApp {
     /** select | pan | terrain | floor | wall | window | door */
     activeTool: "select",
 
+    /** layout = 2D editor; visualize = Three.js walkthrough */
+    viewMode: "layout",
+    vizLocked: false,
+    _visualizer: null,
+
     /** Master switch: when false, hide all size labels regardless of per-object setting */
     showDimensionsGlobal: false,
 
@@ -170,6 +175,47 @@ export function floorPlanApp(): FloorPlanApp {
           }
         }
       });
+    },
+
+    /**
+     * Switch between 2D layout and 3D visualize modes.
+     * @param mode - "layout" | "visualize"
+     */
+    setViewMode(mode) {
+      const next = mode === "visualize" ? "visualize" : "layout";
+      if (next === this.viewMode) return;
+      this.viewMode = next;
+      if (next === "visualize") {
+        this.$nextTick(() => {
+          void this.startVisualizer();
+        });
+      } else {
+        this.stopVisualizer();
+      }
+    },
+
+    /** Lazy-load Three.js visualizer on first enter (keeps layout bundle small). */
+    async startVisualizer() {
+      const mount = this.$refs.vizMount;
+      if (!mount) return;
+      if (!this._visualizer) {
+        const { createVisualizer } = await import("@fp/visualizer");
+        this._visualizer = createVisualizer(mount, {
+          onLockChange: (locked) => {
+            this.vizLocked = locked;
+          },
+        });
+      }
+      this._visualizer.rebuild(this.objects);
+      this._visualizer.start();
+      this.vizLocked = this._visualizer.isLocked();
+    },
+
+    stopVisualizer() {
+      if (this._visualizer) {
+        this._visualizer.stop();
+      }
+      this.vizLocked = false;
     },
 
     isTypingTarget(el) {

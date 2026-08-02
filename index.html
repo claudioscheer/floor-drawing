@@ -32,8 +32,27 @@
 
         <div class="header-center">
           <div class="mode-pills" role="tablist" aria-label="View mode">
-            <button type="button" class="mode-pill is-active" role="tab" aria-selected="true">Layout</button>
-            <button type="button" class="mode-pill" role="tab" aria-selected="false" disabled title="Coming soon">Visualize</button>
+            <button
+              type="button"
+              class="mode-pill"
+              role="tab"
+              :class="viewMode === 'layout' ? 'is-active' : ''"
+              :aria-selected="(viewMode === 'layout').toString()"
+              @click="setViewMode('layout')"
+            >
+              Layout
+            </button>
+            <button
+              type="button"
+              class="mode-pill"
+              role="tab"
+              :class="viewMode === 'visualize' ? 'is-active' : ''"
+              :aria-selected="(viewMode === 'visualize').toString()"
+              @click="setViewMode('visualize')"
+              title="3D walkthrough of the plan"
+            >
+              Visualize
+            </button>
           </div>
         </div>
 
@@ -86,9 +105,9 @@
         </div>
       </header>
 
-      <div class="app-body">
+      <div class="app-body" :class="{ 'is-visualize': viewMode === 'visualize' }">
         <!-- Left: tools + layers -->
-        <aside class="panel panel-left" aria-label="Tools and layers">
+        <aside class="panel panel-left" aria-label="Tools and layers" x-show="viewMode === 'layout'">
           <div class="panel-header">
             <h2>Tools</h2>
           </div>
@@ -363,10 +382,27 @@
         </aside>
 
         <!-- Center: canvas -->
-        <main class="canvas-shell" aria-label="Drawing canvas">
+        <main class="canvas-shell" :aria-label="viewMode === 'visualize' ? '3D visualizer' : 'Drawing canvas'">
+          <!-- 3D visualizer (Three.js) -->
+          <div
+            class="viz-viewport"
+            x-ref="vizMount"
+            x-show="viewMode === 'visualize'"
+            x-cloak
+          >
+            <div class="viz-hud" aria-live="polite">
+              <div class="viz-hud-card">
+                <strong x-text="vizLocked ? 'Walking' : 'Explore the plan'"></strong>
+                <span x-show="!vizLocked">Click the view to look around · WASD move · Shift run · Esc unlock</span>
+                <span x-show="vizLocked">WASD move · mouse look · Shift run · Esc release cursor</span>
+              </div>
+            </div>
+          </div>
+
           <div
             class="canvas-viewport"
             x-ref="viewport"
+            x-show="viewMode === 'layout'"
             :class="{
               'tool-place': isPlaceTool,
               'tool-pan': activeTool === 'pan' || panState.spaceDown,
@@ -514,7 +550,7 @@
           </div>
 
           <!-- Floating zoom (bottom-right) -->
-          <div class="float-zoom" role="group" aria-label="Zoom">
+          <div class="float-zoom" role="group" aria-label="Zoom" x-show="viewMode === 'layout'">
             <button type="button" class="float-btn" @click="zoomIn()" title="Zoom in" aria-label="Zoom in">+</button>
             <button type="button" class="float-btn" @click="zoomOut()" title="Zoom out" aria-label="Zoom out">−</button>
             <div class="float-zoom-label" x-text="Math.round(zoom * 100) + '%'" title="Current zoom"></div>
@@ -522,7 +558,7 @@
           </div>
 
           <!-- Bottom toolbar -->
-          <div class="float-toolbar" role="toolbar" aria-label="Tools">
+          <div class="float-toolbar" role="toolbar" aria-label="Tools" x-show="viewMode === 'layout'">
             <button
               type="button"
               class="tool-btn"
@@ -568,7 +604,7 @@
             </button>
           </div>
 
-          <div class="canvas-status" aria-live="polite">
+          <div class="canvas-status" aria-live="polite" x-show="viewMode === 'layout'">
             <span x-text="objects.length + ' object' + (objects.length === 1 ? '' : 's')"></span>
             <span class="dot">·</span>
             <span x-text="selected ? ('Selected: ' + objectDisplayName(selected)) : 'Nothing selected'"></span>
@@ -584,7 +620,7 @@
         </main>
 
         <!-- Right: inspector -->
-        <aside class="panel panel-right" aria-label="Properties">
+        <aside class="panel panel-right" aria-label="Properties" x-show="viewMode === 'layout'">
           <div class="panel-header panel-header-right">
             <h2
               x-text="selectedIds.length > 1

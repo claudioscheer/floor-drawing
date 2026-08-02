@@ -27,6 +27,7 @@
       "@fp/demo": ["./src/demo/index.ts"],
       "@fp/snap": ["./src/snap/index.ts"],
       "@fp/interact": ["./src/interact/index.ts"],
+      "@fp/visualizer": ["./src/visualizer/index.ts"],
       "@fp/app": ["./src/app/index.ts"]
     }
   },

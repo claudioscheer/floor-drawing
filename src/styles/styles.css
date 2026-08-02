@@ -231,6 +231,10 @@ button {
   height: 100%;
 }
 
+.app-body.is-visualize {
+  grid-template-columns: 1fr;
+}
+
 /* Panels — dense, quiet chrome */
 
 .panel {
@@ -2044,4 +2048,63 @@ button {
 .palette-ghost.fp-object--door {
   background: #f7f2ea;
   box-shadow: inset 0 0 0 1px #8a7355;
+}
+
+/* 3D Visualize mode -------------------------------------------------------- */
+
+.viz-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #1a2030;
+  overflow: hidden;
+}
+
+.viz-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: crosshair;
+}
+
+.viz-canvas:focus {
+  outline: none;
+}
+
+.viz-hud {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.viz-hud-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  max-width: min(420px, calc(100vw - 48px));
+  border-radius: 6px;
+  background: rgba(18, 22, 30, 0.72);
+  color: #f2f4f8;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(6px);
+}
+
+.viz-hud-card strong {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.viz-hud-card span {
+  color: rgba(242, 244, 248, 0.82);
+}
+
+.app-body.is-visualize .canvas-shell {
+  background: #1a2030;
 }
