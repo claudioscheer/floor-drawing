@@ -890,7 +890,7 @@ export function floorPlanApp(): FloorPlanApp {
         },
         others,
         primary.type,
-        { useGrid: true }
+        { useGrid: true, zoom: zoom }
       );
 
       const dx = snapped.x - drag.startX;
@@ -2062,13 +2062,11 @@ export function floorPlanApp(): FloorPlanApp {
         y: worldY,
       });
 
-      // Snap to partners on drop
-      const snapped = snapPosition(
-        obj,
-        this.objects,
-        type,
-        { range: 16 }
-      );
+      // Snap to partners on drop (screen-space range via zoom)
+      const snapped = snapPosition(obj, this.objects, type, {
+        useGrid: true,
+        zoom: this.zoom || 1,
+      });
       obj = { ...obj, x: snapped.x, y: snapped.y };
 
       this.pushHistory();

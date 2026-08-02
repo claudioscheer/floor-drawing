@@ -166,7 +166,16 @@ export interface ResizeEdges {
 
 /** Options for snap engines. */
 export interface SnapOptions {
+  /**
+   * Snap threshold in world pixels. When omitted, derived from {@link zoom}
+   * so the magnetic distance stays roughly constant on screen.
+   */
   range?: number;
+  /**
+   * Current canvas zoom (world → screen scale). Used to convert a fixed
+   * screen-pixel threshold into world units when `range` is omitted.
+   */
+  zoom?: number;
   partnersMap?: Readonly<Record<string, readonly ObjectType[]>>;
   grid?: number;
   useGrid?: boolean;

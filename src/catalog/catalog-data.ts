@@ -77,13 +77,13 @@ export const CATALOG: Readonly<Record<ObjectType, CatalogEntry>> = {
 };
 
 /**
- * Preferred snap partners for each type (order = priority).
- * Used by the snap engine when collecting candidate edges.
+ * Preferred snap partners for each type.
+ * Inclusive so components can lock to wall/floor edges when placing.
  */
 export const SNAP_PARTNERS: Readonly<Record<ObjectType, readonly ObjectType[]>> = {
-  terrain: ["terrain"],
-  floor: ["floor", "terrain"],
-  wall: ["floor", "wall", "terrain"],
-  window: ["wall", "window"],
-  door: ["wall", "door"],
+  terrain: ["terrain", "floor", "wall"],
+  floor: ["floor", "terrain", "wall"],
+  wall: ["floor", "wall", "terrain", "window", "door"],
+  window: ["wall", "window", "door", "floor"],
+  door: ["wall", "door", "window", "floor"],
 };

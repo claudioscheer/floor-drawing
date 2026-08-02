@@ -283,7 +283,7 @@ export function setupInteract(appGetter: AppGetter): void {
             othersExcept(app, obj.id),
             obj.type,
             mins,
-            { useGrid: true }
+            { useGrid: true, zoom }
           );
 
           obj.x = snapped.x;
