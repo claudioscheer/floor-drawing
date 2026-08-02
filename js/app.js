@@ -69,6 +69,24 @@ function floorPlanApp() {
       pointerId: null,
     },
 
+    /**
+     * Native canvas object drag (not interact.js).
+     * Interact starts on the topmost hit target (often a wall pad) and cancels
+     * when the pointer leaves it — furniture never moves. We own drag here.
+     */
+    objectDrag: {
+      active: false,
+      id: null,
+      pointerId: null,
+      lastX: 0,
+      lastY: 0,
+      x: 0,
+      y: 0,
+      startX: 0,
+      startY: 0,
+      peers: [],
+    },
+
     get selected() {
       if (!this.selectedId) return null;
       return this.objects.find((o) => o.id === this.selectedId) || null;
@@ -76,13 +94,14 @@ function floorPlanApp() {
 
     init() {
       // Seed demo layout once (bump key when real-world scale / demo changes)
-      if (!window.__fpBooted_v14) {
-        window.__fpBooted_v14 = true;
-        // 16×33 m multifamily: 4 apts + drive + parking (100 px = 1 m)
-        this.objects = FPComponents.createDemoLayout();
+      if (!window.__fpBooted_v39) {
+        window.__fpBooted_v39 = true;
+        // Front: ped portal left of building; one car portão on aisle
+        const demo = FPComponents.createDemoLayout();
+        this.objects = demo.objects || demo;
+        this.groups = demo.groups || [];
+        this.groupSeq = demo.groupSeq || this.groups.length + 1;
         FPComponents.seedIdCounter(this.objects);
-        this.groups = [];
-        this.groupSeq = 1;
         this.selectedIds = [];
       }
 
@@ -150,6 +169,11 @@ function floorPlanApp() {
         : zBase * 1000 + Math.max(0, idx);
       // Canvas world is CSS-scaled by zoom — thicken chrome so it stays readable
       const invZ = 1 / Math.max(0.15, this.zoom || 1);
+      // Screen-space hit padding for thin walls/windows/doors (~14px on screen)
+      const hitPad =
+        obj.type === "window" || obj.type === "door" || obj.type === "wall"
+          ? Math.max(10, Math.round(14 * invZ))
+          : 0;
       const style = {
         left: obj.x + "px",
         top: obj.y + "px",
@@ -158,6 +182,7 @@ function floorPlanApp() {
         transformOrigin: "center center",
         // CSS var so inner labels can counter-rotate and stay upright
         "--obj-rot": rot + "deg",
+        "--hit-pad": hitPad ? hitPad + "px" : "0px",
         zIndex: String(z),
         display: obj.visible === false ? "none" : null,
         opacity: String(opacity),
@@ -216,8 +241,8 @@ function floorPlanApp() {
       if (this.dimsVisible(obj)) classes.push("has-dims");
       if (obj.locked) classes.push("is-locked");
       if (obj.visible === false) classes.push("is-hidden");
-      // Windows: orientation for glass banding
-      if (obj.type === "window" || obj.type === "door") {
+      // Orientation: glass banding (window) + hit-pad axis (window/door/wall)
+      if (obj.type === "window" || obj.type === "door" || obj.type === "wall") {
         classes.push(obj.width >= obj.height ? "is-horizontal" : "is-vertical");
       }
       return classes.join(" ");
@@ -670,13 +695,271 @@ function floorPlanApp() {
       };
     },
 
+    /**
+     * Smallest object under the cursor. Walls sit above floors in z-order and
+     * use expanded hit pads, so without this furniture (Armário, etc.) is unselectable.
+     */
+    pickObjectAtClient(clientX, clientY) {
+      if (typeof document.elementsFromPoint !== "function") return null;
+      const stack = document.elementsFromPoint(clientX, clientY);
+      const seen = new Set();
+      const candidates = [];
+      for (let i = 0; i < stack.length; i++) {
+        const node = stack[i];
+        const el =
+          node.classList && node.classList.contains("fp-object")
+            ? node
+            : node.closest
+              ? node.closest(".fp-object")
+              : null;
+        if (!el) continue;
+        const oid = el.getAttribute("data-id");
+        if (!oid || seen.has(oid)) continue;
+        seen.add(oid);
+        const obj = this.objects.find((o) => o.id === oid);
+        if (!obj || obj.visible === false) continue;
+        const area = Math.max(1, Math.abs(Number(obj.width) * Number(obj.height)));
+        const wallBias = obj.type === "wall" ? 1.25 : 1;
+        candidates.push({ id: oid, score: area * wallBias });
+      }
+      if (!candidates.length) return null;
+      candidates.sort((a, b) => a.score - b.score);
+      return candidates[0].id;
+    },
+
     onObjectPointerDown(event, id) {
       // Hand tool: ignore objects (pointer-events also none in CSS)
       if (this.activeTool === "pan" || this.panState.spaceDown) return;
       // Let resize handles / dim badges own their gestures
       if (event.target.closest && event.target.closest(".handle")) return;
       if (event.target.closest && event.target.closest(".dim-badge")) return;
-      this.selectObject(id, { event });
+      // Prefer furniture under walls / room slabs at this point
+      const picked = this.pickObjectAtClient(event.clientX, event.clientY);
+      if (picked) id = picked;
+
+      const obj = this.objects.find((o) => o.id === id);
+      if (!obj) return;
+
+      if (event.stopPropagation) event.stopPropagation();
+      this._suppressClearUntil = Date.now() + 450;
+
+      // focus:false — don't pan mid-click
+      this.selectObject(id, { event, focus: false });
+      if (typeof this.$nextTick === "function") {
+        this.$nextTick(() => this.scrollLayerIntoView(id));
+      } else {
+        this.scrollLayerIntoView(id);
+      }
+
+      // Locked objects select but do not move
+      if (obj.locked) return;
+      if (event.button != null && event.button !== 0) return;
+
+      this.startObjectDrag(event, id);
+    },
+
+    startObjectDrag(event, id) {
+      const obj = this.objects.find((o) => o.id === id);
+      if (!obj || obj.locked) return;
+
+      if (this.objectDrag && this.objectDrag.active) this.endObjectDrag();
+
+      this.pushHistory();
+
+      const peerIds = this.movePeerIds(id);
+      const peers = peerIds
+        .map((pid) => {
+          const o = this.objects.find((x) => x.id === pid);
+          if (!o || o.locked) return null;
+          return { id: pid, startX: o.x, startY: o.y };
+        })
+        .filter(Boolean);
+      if (!peers.length) return;
+
+      this.objectDrag = {
+        active: true,
+        id,
+        pointerId: event.pointerId,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        x: obj.x,
+        y: obj.y,
+        startX: obj.x,
+        startY: obj.y,
+        peers,
+      };
+
+      const el = document.querySelector('.fp-object[data-id="' + id + '"]');
+      if (el) {
+        el.classList.add("is-dragging");
+        el.setAttribute("data-dragging", "1");
+        try {
+          if (event.pointerId != null && el.setPointerCapture) {
+            el.setPointerCapture(event.pointerId);
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      }
+
+      // Capture app via window so listeners stay valid across Alpine ticks
+      const onMove = (ev) => {
+        const app = window.__fpApp || this;
+        if (app && typeof app.onObjectDragMove === "function") app.onObjectDragMove(ev);
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove, true);
+        window.removeEventListener("pointerup", onUp, true);
+        window.removeEventListener("pointercancel", onUp, true);
+        const app = window.__fpApp || this;
+        if (app && typeof app.endObjectDrag === "function") app.endObjectDrag();
+      };
+      this._objectDragMove = onMove;
+      this._objectDragUp = onUp;
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("pointerup", onUp, true);
+      window.addEventListener("pointercancel", onUp, true);
+    },
+
+    onObjectDragMove(event) {
+      const drag = this.objectDrag;
+      if (!drag || !drag.active) return;
+      // Don't hard-require matching pointerId — some browsers vary it mid-gesture
+
+      const zoom = this.zoom || 1;
+      const dxScreen = event.clientX - drag.lastX;
+      const dyScreen = event.clientY - drag.lastY;
+      drag.lastX = event.clientX;
+      drag.lastY = event.clientY;
+
+      drag.x += dxScreen / zoom;
+      drag.y += dyScreen / zoom;
+
+      const primary = this.objects.find((o) => o.id === drag.id);
+      if (!primary) return;
+
+      const exclude = new Set(drag.peers.map((p) => p.id));
+      const others = this.objects.filter((o) => !exclude.has(o.id));
+      const snapped =
+        typeof FPSnap !== "undefined" && FPSnap.snapPosition
+          ? FPSnap.snapPosition(
+              {
+                x: drag.x,
+                y: drag.y,
+                width: primary.width,
+                height: primary.height,
+                rotation: primary.rotation || 0,
+              },
+              others,
+              primary.type,
+              { useGrid: true }
+            )
+          : { x: drag.x, y: drag.y, guides: { v: null, h: null }, active: false };
+
+      const dx = snapped.x - drag.startX;
+      const dy = snapped.y - drag.startY;
+
+      for (const p of drag.peers) {
+        const o = this.objects.find((x) => x.id === p.id);
+        if (!o) continue;
+        o.x = p.startX + dx;
+        o.y = p.startY + dy;
+        const pel = document.querySelector('.fp-object[data-id="' + p.id + '"]');
+        if (pel) {
+          pel.style.left = o.x + "px";
+          pel.style.top = o.y + "px";
+        }
+      }
+
+      this.snapGuides = {
+        v: snapped.active ? snapped.guides.v : null,
+        h: snapped.active ? snapped.guides.h : null,
+        active: !!snapped.active,
+      };
+    },
+
+    endObjectDrag() {
+      const drag = this.objectDrag;
+      if (!drag || !drag.active) {
+        this.objectDrag = {
+          active: false,
+          id: null,
+          pointerId: null,
+          lastX: 0,
+          lastY: 0,
+          x: 0,
+          y: 0,
+          startX: 0,
+          startY: 0,
+          peers: [],
+        };
+        return;
+      }
+
+      for (const p of drag.peers) {
+        const o = this.objects.find((x) => x.id === p.id);
+        const pel = document.querySelector('.fp-object[data-id="' + p.id + '"]');
+        if (pel) {
+          pel.classList.remove("is-dragging");
+          pel.removeAttribute("data-dragging");
+          try {
+            if (drag.pointerId != null && pel.releasePointerCapture) {
+              pel.releasePointerCapture(drag.pointerId);
+            }
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        if (o) {
+          this.patchObject(o.id, { x: o.x, y: o.y });
+        }
+      }
+
+      this.snapGuides = { v: null, h: null, active: false };
+      this.objectDrag = {
+        active: false,
+        id: null,
+        pointerId: null,
+        lastX: 0,
+        lastY: 0,
+        x: 0,
+        y: 0,
+        startX: 0,
+        startY: 0,
+        peers: [],
+      };
+      this._suppressClearUntil = Date.now() + 200;
+    },
+
+    /**
+     * Nudge selection by world pixels (1 px = 1 cm). Arrow keys use this.
+     * withHistory=false for key-repeat steps after the first press.
+     */
+    nudgeSelected(dx, dy, withHistory) {
+      const ids =
+        this.selectedIds && this.selectedIds.length
+          ? this.selectedIds.slice()
+          : this.selectedId
+            ? [this.selectedId]
+            : [];
+      if (!ids.length) return;
+
+      const movable = ids
+        .map((id) => this.objects.find((o) => o.id === id))
+        .filter((o) => o && !o.locked && o.visible !== false);
+      if (!movable.length) return;
+
+      if (withHistory !== false) this.pushHistory();
+
+      for (const o of movable) {
+        o.x = Number(o.x) + dx;
+        o.y = Number(o.y) + dy;
+        const el = document.querySelector('.fp-object[data-id="' + o.id + '"]');
+        if (el) {
+          el.style.left = o.x + "px";
+          el.style.top = o.y + "px";
+        }
+      }
     },
 
     /**
@@ -922,9 +1205,9 @@ function floorPlanApp() {
 
     layerDisplayName(obj) {
       if (!obj) return "";
-      if (obj.type === "wall") return "Wall";
       const name = obj.name && String(obj.name).trim();
       if (name) return name;
+      if (obj.type === "wall") return "Wall";
       return obj.type.charAt(0).toUpperCase() + obj.type.slice(1);
     },
 
@@ -1022,16 +1305,14 @@ function floorPlanApp() {
     },
 
     /**
-     * IDs that should move together when dragging `id`
-     * (multi-selection containing it, else whole group, else just itself).
+     * IDs that should move together when dragging `id`.
+     * - Multi-selection containing it → move all selected
+     * - Otherwise → only this object (groups are for Layers only, not forced co-drag)
+     *   so every furniture piece (e.g. Armário lavanderia) can be moved alone.
      */
     movePeerIds(id) {
       if (this.selectedIds.length > 1 && this.selectedIds.includes(id)) {
         return this.selectedIds.slice();
-      }
-      const obj = this.objects.find((o) => o.id === id);
-      if (obj && obj.groupId) {
-        return this.objects.filter((o) => o.groupId === obj.groupId).map((o) => o.id);
       }
       return [id];
     },
@@ -1378,6 +1659,69 @@ function floorPlanApp() {
       this.snapGuides = { v: null, h: null, active: false };
     },
 
+    /**
+     * Clone selected object(s) with new ids, offset so the copy is visible.
+     * Independent of groups. Selects the new clone(s).
+     */
+    duplicateSelected() {
+      const ids =
+        this.selectedIds.length > 0
+          ? this.selectedIds.slice()
+          : this.selectedId
+            ? [this.selectedId]
+            : [];
+      if (!ids.length) return;
+
+      const sources = ids
+        .map((id) => this.objects.find((o) => o.id === id))
+        .filter(Boolean);
+      if (!sources.length) return;
+
+      this.pushHistory();
+      // 0.25 m southeast so the copy is not stacked on the original
+      const offset = FPComponents.unitToPx(0.25, "m");
+      const nextOffsets = { ...(this.labelOffsets || {}) };
+      const clones = sources.map((src) => {
+        const overrides = {
+          name: src.name,
+          notes: src.notes ?? "",
+          x: Number(src.x) + offset,
+          y: Number(src.y) + offset,
+          width: src.width,
+          height: src.height,
+          rotation: src.rotation,
+          labelRotation: src.labelRotation,
+          visible: src.visible !== false,
+          locked: !!src.locked,
+          // Fresh copy is not in the source group
+          groupId: null,
+          opacity: src.opacity,
+          showDimensions: src.showDimensions !== false,
+        };
+        if (src.type === "door") {
+          overrides.hinge = src.hinge || "start";
+          overrides.opens = src.opens || "neg";
+        }
+        const clone = FPComponents.createObject(src.type, overrides);
+        const off = this.labelOffsets && this.labelOffsets[src.id];
+        if (off) {
+          nextOffsets[clone.id] = {
+            w: { x: off.w?.x || 0, y: off.w?.y || 0 },
+            h: { x: off.h?.x || 0, y: off.h?.y || 0 },
+            n: { x: (off.n && off.n.x) || 0, y: (off.n && off.n.y) || 0 },
+          };
+        }
+        return clone;
+      });
+
+      // Append so clones paint above the originals
+      this.objects = this.objects.concat(clones);
+      this.labelOffsets = nextOffsets;
+      this.selectedIds = clones.map((c) => c.id);
+      this.selectedId = clones[clones.length - 1].id;
+      this.snapGuides = { v: null, h: null, active: false };
+    },
+
     onKeydown(e) {
       const mod = e.metaKey || e.ctrlKey;
       // Let inputs keep native text undo while focused
@@ -1394,6 +1738,11 @@ function floorPlanApp() {
           return;
         }
       }
+      if (mod && (e.key === "d" || e.key === "D") && !this.isTypingTarget(e.target)) {
+        e.preventDefault();
+        this.duplicateSelected();
+        return;
+      }
       if (this.isTypingTarget(e.target)) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         if (this.selectedId) {
@@ -1403,6 +1752,28 @@ function floorPlanApp() {
       }
       if (e.key === "Escape") {
         this.clearSelection();
+      }
+      // Arrow keys: nudge selection 1 world px (1 cm). Hold key = browser key-repeat.
+      if (
+        !mod &&
+        (e.key === "ArrowUp" ||
+          e.key === "ArrowDown" ||
+          e.key === "ArrowLeft" ||
+          e.key === "ArrowRight")
+      ) {
+        if (this.selectedId || (this.selectedIds && this.selectedIds.length)) {
+          e.preventDefault();
+          const step = 1;
+          let dx = 0;
+          let dy = 0;
+          if (e.key === "ArrowLeft") dx = -step;
+          if (e.key === "ArrowRight") dx = step;
+          if (e.key === "ArrowUp") dy = -step;
+          if (e.key === "ArrowDown") dy = step;
+          // One history entry per held-key gesture (first press only)
+          this.nudgeSelected(dx, dy, !e.repeat);
+        }
+        return;
       }
       // R / Shift+R: rotate selected ±15° (no modifier keys)
       if ((e.key === "r" || e.key === "R") && !mod) {
@@ -1566,10 +1937,19 @@ function floorPlanApp() {
       // Hand tool never places or clears selection on click
       if (this.activeTool === "pan") return;
 
+      // Ignore residual click after selecting a thin object (window/door/wall):
+      // mousedown hits the leaf, mouseup slips onto the paper → empty target.
+      if (this._suppressClearUntil && Date.now() < this._suppressClearUntil) {
+        return;
+      }
+
       const empty =
         e.target === this.$refs.viewport ||
         e.target.classList.contains("canvas-world") ||
-        e.target.classList.contains("grid-bg");
+        e.target.classList.contains("grid-bg") ||
+        e.target.classList.contains("scale-bar") ||
+        e.target.classList.contains("scale-bar-line") ||
+        e.target.classList.contains("scale-bar-label");
 
       if (!empty) return;
 

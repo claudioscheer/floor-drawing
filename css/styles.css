@@ -1262,6 +1262,39 @@ button {
   box-sizing: border-box;
 }
 
+/*
+ * Expanded hit targets for thin plan elements (wall thickness ≈ 10 world px).
+ * At default zoom that is ~2 screen px — nearly unclickable. --hit-pad is set
+ * in objectStyle() to ~14 screen px, so the visual size stays the same.
+ */
+.fp-object--window::before,
+.fp-object--door::before,
+.fp-object--wall::before {
+  content: "";
+  position: absolute;
+  background: transparent;
+  /* Do not use z-index: -1 — that can drop the pad behind parents and kill hits */
+  pointer-events: auto;
+}
+
+.fp-object--window.is-horizontal::before,
+.fp-object--door.is-horizontal::before,
+.fp-object--wall.is-horizontal::before {
+  left: 0;
+  right: 0;
+  top: calc(-1 * var(--hit-pad, 12px));
+  bottom: calc(-1 * var(--hit-pad, 12px));
+}
+
+.fp-object--window.is-vertical::before,
+.fp-object--door.is-vertical::before,
+.fp-object--wall.is-vertical::before {
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--hit-pad, 12px));
+  right: calc(-1 * var(--hit-pad, 12px));
+}
+
 .fp-object:active {
   cursor: grabbing;
 }
@@ -1526,8 +1559,11 @@ button {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Above doors/objects so size labels stay clickable and visible */
-  z-index: 460000;
+  /*
+   * Above selected objects (500000+idx). Values must stay readable and
+   * grab-able over walls, fills, door swings, and selection chrome.
+   */
+  z-index: 600000;
   overflow: visible;
 }
 
