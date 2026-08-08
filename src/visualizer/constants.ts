@@ -34,6 +34,13 @@ export const LAYER_TOP_M = {
   stripe: 0.115,
 } as const;
 
+/**
+ * Vertical distance between consecutive floor origins. The next room slab's
+ * underside lands exactly on the top of the walls below, avoiding air gaps.
+ */
+export const STOREY_HEIGHT_M =
+  WALL_HEIGHT_M - (LAYER_TOP_M.room - FLOOR_THICK_M);
+
 /** First-person eye height. */
 export const EYE_HEIGHT_M = 1.6;
 

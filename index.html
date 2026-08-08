@@ -206,7 +206,7 @@
               :class="viewMode === 'visualize' ? 'is-active' : ''"
               :aria-selected="(viewMode === 'visualize').toString()"
               @click="setViewMode('visualize')"
-              title="3D walkthrough of the plan"
+              title="3D view of the current floor or entire project"
             >
               Visualize
             </button>
@@ -269,136 +269,79 @@
         </div>
       </header>
 
-      <!-- Building structure: levels (stories) + units (house / apartment) -->
+      <!-- Building structure: floors (stories). -->
       <div
         class="structure-bar"
         x-show="screen === 'editor' && viewMode === 'layout'"
         x-cloak
         role="region"
-        aria-label="Levels and units"
+        aria-label="Floors"
       >
-        <div class="structure-row structure-levels">
-          <span class="structure-label">Level</span>
+        <div class="structure-row structure-floors">
+          <span class="structure-label">Floor</span>
           <button
             type="button"
             class="structure-help-btn"
-            :class="structureHelpKind === 'level' ? 'is-open' : ''"
-            @click.stop="toggleStructureHelp($event, 'level')"
-            aria-label="About levels"
-            title="About levels"
+            :class="structureHelpKind === 'floor' ? 'is-open' : ''"
+            @click.stop="toggleStructureHelp($event, 'floor')"
+            aria-label="About floors"
+            title="About floors"
           >
             ?
           </button>
-          <div class="structure-tabs" role="tablist" aria-label="Building levels">
-            <template x-for="level in levels" :key="level.id">
+          <div class="structure-tabs" role="tablist" aria-label="Building floors">
+            <template x-for="floor in floors" :key="floor.id">
               <button
                 type="button"
                 class="structure-tab"
                 role="tab"
-                :class="activeLevelId === level.id ? 'is-active' : ''"
-                :aria-selected="(activeLevelId === level.id).toString()"
-                @click="setActiveLevel(level.id)"
-                @dblclick="renameLevel(level.id, prompt('Level name', level.name) || level.name)"
-                x-text="level.name"
+                :class="activeFloorId === floor.id ? 'is-active' : ''"
+                :aria-selected="(activeFloorId === floor.id).toString()"
+                @click="setActiveFloor(floor.id)"
+                @dblclick="renameFloor(floor.id, prompt('Floor name', floor.name) || floor.name)"
+                x-text="floor.name"
               ></button>
             </template>
             <button
               type="button"
               class="btn btn-secondary btn-sm structure-add"
-              @click="addLevel()"
-              title="Add a story (level)"
+              @click="addFloor()"
+              title="Add a floor"
             >
-              + Level
+              + Floor
             </button>
             <button
               type="button"
               class="btn btn-secondary btn-sm"
-              @click="duplicateActiveLevel()"
-              :disabled="!activeLevelId"
-              title="Duplicate this level (typical floor)"
+              @click="duplicateActiveFloor()"
+              :disabled="!activeFloorId"
+              title="Duplicate this floor"
             >
-              Duplicate level
+              Duplicate floor
             </button>
             <button
               type="button"
               class="btn btn-danger btn-sm"
-              @click="deleteLevel(activeLevelId)"
-              :disabled="!activeLevelId || levels.length <= 1"
-              title="Delete active level"
+              @click="deleteFloor(activeFloorId)"
+              :disabled="!activeFloorId || !floorBelow()"
+              :title="floorBelow() ? 'Delete active floor' : 'Ground floor cannot be deleted'"
             >
-              Delete level
+              Delete floor
             </button>
           </div>
-        </div>
-        <div class="structure-row structure-units">
-          <span class="structure-label">Unit</span>
-          <button
-            type="button"
-            class="structure-help-btn"
-            :class="structureHelpKind === 'unit' ? 'is-open' : ''"
-            @click.stop="toggleStructureHelp($event, 'unit')"
-            aria-label="About units"
-            title="About units"
+          <label
+            class="floor-snap-toggle"
+            :class="!floorBelow() ? 'is-disabled' : ''"
+            :title="floorBelow() ? 'Include the floor below when snapping walls and objects' : 'Ground has no floor below'"
           >
-            ?
-          </button>
-          <div class="structure-tabs" role="tablist" aria-label="Units on this level">
-            <button
-              type="button"
-              class="structure-tab structure-tab-shared"
-              role="tab"
-              :class="activeUnitId === null ? 'is-active' : ''"
-              :aria-selected="(activeUnitId === null).toString()"
-              @click="setActiveUnit(null)"
-              title="Level only: terrain, stairs, corridors — not inside an apartment"
-            >
-              Shared
-            </button>
-            <template x-for="unit in unitsForActiveLevel()" :key="unit.id">
-              <button
-                type="button"
-                class="structure-tab structure-tab-unit"
-                role="tab"
-                :class="activeUnitId === unit.id ? 'is-active' : ''"
-                :aria-selected="(activeUnitId === unit.id).toString()"
-                @click="setActiveUnit(unit.id)"
-                @dblclick="renameUnit(unit.id, prompt('Unit name (e.g. Apt 1)', unit.name) || unit.name)"
-                x-text="unit.name"
-                :title="'Drawing into ' + unit.name + '. Double-click to rename.'"
-              ></button>
-            </template>
-            <button
-              type="button"
-              class="btn btn-primary btn-sm structure-add"
-              @click="addUnit()"
-              :disabled="!activeLevelId"
-              title="Add another apartment/unit on this level"
-            >
-              + Unit
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="assignSelectionToActiveUnit()"
-              :disabled="!(selectedId || (selectedIds && selectedIds.length))"
-              title="Move selection into Shared (level) or the active unit"
-            >
-              Assign selection
-            </button>
-            <button
-              type="button"
-              class="btn btn-danger btn-sm"
-              @click="deleteUnit(activeUnitId)"
-              :disabled="!activeUnitId || unitsForActiveLevel().length <= 1"
-              title="Delete the selected unit and its objects"
-            >
-              Delete unit
-            </button>
-          </div>
-          <span
-            class="structure-drawing-into"
-            x-text="'Drawing into: ' + activeUnitLabel()"
-          ></span>
+            <input
+              type="checkbox"
+              :checked="snapToFloorBelow"
+              :disabled="!floorBelow()"
+              @change="setSnapToFloorBelow($event.target.checked)"
+            />
+            <span x-text="floorBelow() ? 'Snap to ' + floorBelow().name : 'No floor below'"></span>
+          </label>
         </div>
       </div>
 
@@ -463,6 +406,7 @@
                       class="palette-item"
                       :class="activeTool === item.type ? 'is-active' : ''"
                       :data-component-type="item.type"
+                      :disabled="item.type === 'terrain' && !canPlaceTerrain()"
                       @pointerdown="startPaletteDrag($event, item.type)"
                       @click="setTool(item.type)"
                       @mouseenter="showPaletteTip($event, item.label, item.description)"
@@ -618,13 +562,6 @@
                         :title="row.obj.type"
                       ></span>
                       <span class="layer-name" x-text="layerDisplayName(row.obj)"></span>
-                      <span
-                        class="layer-unit-tag"
-                        x-show="unitNameForObject(row.obj)"
-                        x-text="unitNameForObject(row.obj)"
-                        :class="!row.obj.unitId ? 'is-shared' : ''"
-                        :title="row.obj.unitId ? 'Belongs to unit ' + unitNameForObject(row.obj) : 'Shared on this level (not in a unit)'"
-                      ></span>
                       <button
                         type="button"
                         class="layer-icon-btn"
@@ -663,7 +600,27 @@
           >
             <div class="viz-hud" aria-live="polite">
               <div class="viz-hud-card">
-                <strong x-text="vizLocked ? 'Spectating' : 'Explore the plan'"></strong>
+                <div class="viz-scope" role="group" aria-label="3D visualization scope">
+                  <button
+                    type="button"
+                    :class="!visualizeAllFloors ? 'is-active' : ''"
+                    :aria-pressed="(!visualizeAllFloors).toString()"
+                    @click.stop="setVisualizeAllFloors(false)"
+                  >
+                    Current floor
+                  </button>
+                  <button
+                    type="button"
+                    :class="visualizeAllFloors ? 'is-active' : ''"
+                    :aria-pressed="visualizeAllFloors.toString()"
+                    @click.stop="setVisualizeAllFloors(true)"
+                  >
+                    Entire project
+                  </button>
+                </div>
+                <strong
+                  x-text="vizLocked ? 'Spectating' : (visualizeAllFloors ? 'Explore the complete building' : 'Explore the current floor')"
+                ></strong>
                 <span x-show="!vizLocked">Click the view to look around · WASD fly · Space rise · C descend · Shift boost · Esc unlock</span>
                 <span x-show="vizLocked">WASD fly through walls · Space rise · C descend · mouse look · Shift boost · Esc release cursor</span>
               </div>
@@ -693,6 +650,38 @@
               <div class="scale-bar" aria-hidden="true">
                 <div class="scale-bar-line"></div>
                 <div class="scale-bar-label">1.00 m</div>
+              </div>
+
+              <!-- Nearest lower floor: drafting reference only, never interactive. -->
+              <div class="reference-floor-layer" aria-hidden="true">
+                <template x-for="obj in referenceObjects()" :key="'reference-' + obj.id">
+                  <div
+                    class="fp-object"
+                    :class="referenceObjectClass(obj)"
+                    :data-id="obj.id"
+                    :data-type="obj.type"
+                    :style="referenceObjectStyle(obj)"
+                  >
+                    <template x-if="obj.type === 'window'">
+                      <span class="window-pane"></span>
+                    </template>
+                  </div>
+                </template>
+              </div>
+
+              <div class="door-swing-layer reference-door-swing-layer" aria-hidden="true">
+                <template x-for="obj in referenceDoorObjects()" :key="'reference-swing-' + obj.id">
+                  <svg
+                    class="door-swing-svg"
+                    xmlns="http://www.w3.org/2000/svg"
+                    :style="doorSwingStyle(obj)"
+                    x-effect="$el.setAttribute('viewBox', doorSwingViewBox(obj))"
+                  >
+                    <path class="door-sector" :d="doorSectorPath(obj)"></path>
+                    <path class="door-arc" :d="doorArcPath(obj)" fill="none"></path>
+                    <path class="door-leaf" :d="doorLeafPath(obj)" fill="none"></path>
+                  </svg>
+                </template>
               </div>
 
               <template x-for="obj in visibleObjects()" :key="obj.id">
@@ -856,6 +845,7 @@
                 type="button"
                 class="tool-btn"
                 :class="activeTool === item.type ? 'is-active' : ''"
+                :disabled="item.type === 'terrain' && !canPlaceTerrain()"
                 @click="setTool(item.type)"
                 :title="'Place ' + item.label"
               >

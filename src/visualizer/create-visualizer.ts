@@ -4,20 +4,25 @@
 
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
-import type { PlanObject } from "@fp/types";
-import { buildSceneFromPlan } from "./build-scene";
+import type { Floor, PlanObject } from "@fp/types";
+import { buildSceneFromFloors } from "./build-scene";
 import {
   EYE_HEIGHT_M,
   FLY_SPEED_M_S,
   LAYER_TOP_M,
+  STOREY_HEIGHT_M,
   SPRINT_SPEED_M_S,
   WALK_SPEED_M_S,
 } from "./constants";
 
 /** Public handle for the Visualize mode renderer. */
 export interface VisualizerHandle {
-  /** Rebuild meshes from the current plan and reset spawn. */
-  rebuild(objects: readonly PlanObject[]): void;
+  /** Rebuild meshes from project floors and reset the camera. */
+  rebuild(
+    objects: readonly PlanObject[],
+    floors: readonly Floor[],
+    options: VisualizerRebuildOptions
+  ): void;
   /** Start render loop and input (call when mode becomes visualize). */
   start(): void;
   /** Stop render loop and release pointer lock. */
@@ -28,6 +33,14 @@ export interface VisualizerHandle {
   isRunning(): boolean;
   /** Whether pointer lock is held (walking). */
   isLocked(): boolean;
+}
+
+/** Scope used when rebuilding the 3D scene. */
+export interface VisualizerRebuildOptions {
+  /** Active floor for current-floor rendering. */
+  activeFloorId: string | null;
+  /** Render the complete stacked project when true. */
+  allFloors: boolean;
 }
 
 export interface CreateVisualizerOptions {
@@ -206,9 +219,13 @@ export function createVisualizer(
     }
   }
 
-  function rebuild(objects: readonly PlanObject[]): void {
+  function rebuild(
+    objects: readonly PlanObject[],
+    floors: readonly Floor[],
+    rebuildOptions: VisualizerRebuildOptions
+  ): void {
     clearPlan();
-    const built = buildSceneFromPlan(objects);
+    const built = buildSceneFromFloors(objects, floors, rebuildOptions);
     planRoot = built.root;
     scene.add(planRoot);
 
@@ -230,16 +247,23 @@ export function createVisualizer(
     planRoot.add(ground);
 
     // Position player
-    controls.object.position.set(built.spawn.x, EYE_HEIGHT_M, built.spawn.z);
+    controls.object.position.set(
+      built.spawn.x,
+      built.spawn.y ?? EYE_HEIGHT_M,
+      built.spawn.z
+    );
     // Yaw: PointerLockControls uses Euler on the camera object
     controls.object.rotation.order = "YXZ";
     controls.object.rotation.y = built.spawn.yaw;
-    controls.object.rotation.x = 0;
+    controls.object.rotation.x = built.spawn.pitch ?? 0;
 
     // Aim sun at lot center
     const midX = (built.bounds.minX + built.bounds.maxX) / 2;
     const midZ = (built.bounds.minZ + built.bounds.maxZ) / 2;
-    sun.target.position.set(midX, 0, midZ);
+    const targetY = rebuildOptions.allFloors
+      ? (Math.max(0, floors.length - 1) * STOREY_HEIGHT_M) / 2
+      : 0;
+    sun.target.position.set(midX, targetY, midZ);
     scene.add(sun.target);
 
     resize();

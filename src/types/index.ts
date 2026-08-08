@@ -11,8 +11,7 @@
  * Plan component kinds supported by the catalog and place tools.
  *
  * English naming (vs PT-BR):
- * - building story/level = *andar* (not modeled as an object type yet)
- * - unit = *apartamento* (use groups / names for now)
+ * - building floor = *andar* (not modeled as an object type yet)
  * - {@link ObjectType} `room` = interior/outdoor slab for a space (*cômodo* / room)
  * - {@link ObjectType} `furniture` = fixtures and moveable pieces (*mobiliário*)
  *
@@ -83,24 +82,14 @@ export interface Group {
 }
 
 /**
- * Building story / level (*andar*).
- * Not a place tool — structural container for units and drawn objects.
+ * Building floor (*andar*).
+ * Not a place tool — structural container for drawn objects.
  */
-export interface Level {
+export interface Floor {
   id: string;
   name: string;
   /** Sort order (0 = ground / lowest). */
   order: number;
-}
-
-/**
- * Generic dwelling container: house, apartment, suite, etc. (*unidade*).
- * Belongs to one {@link Level}.
- */
-export interface Unit {
-  id: string;
-  name: string;
-  levelId: string;
 }
 
 /**
@@ -122,13 +111,8 @@ export interface PlanObject extends Rect {
   visible: boolean;
   locked: boolean;
   groupId: string | null;
-  /** Owning building level (story). */
-  levelId: string;
-  /**
-   * Owning unit on that level, or `null` for shared level objects
-   * (terrain, stairs, corridors not part of an apartment).
-   */
-  unitId: string | null;
+  /** Owning building floor. */
+  floorId: string;
   /** 0–1 CSS opacity (1 = solid). */
   opacity: number;
   showDimensions: boolean;
@@ -247,10 +231,8 @@ export interface DemoLayout {
   objects: PlanObject[];
   groups: Group[];
   groupSeq: number;
-  levels?: Level[];
-  units?: Unit[];
-  levelSeq?: number;
-  unitSeq?: number;
+  floors?: Floor[];
+  floorSeq?: number;
 }
 
 /** Exported plan JSON payload. */
@@ -258,8 +240,7 @@ export interface PlanExport {
   name: string;
   exportedAt: string;
   groups: Group[];
-  levels: Level[];
-  units: Unit[];
+  floors: Floor[];
   objects: Array<
     PlanObject & {
       dimOffW: Point;
@@ -268,6 +249,8 @@ export interface PlanExport {
     }
   >;
   labelOffsets: LabelOffsetsMap;
+  /** Whether snapping to the floor below is enabled. */
+  snapToFloorBelow: boolean;
 }
 
 /**
@@ -279,10 +262,10 @@ export interface PlanDocument {
   objects: PlanObject[];
   groups: Group[];
   groupSeq: number;
-  levels: Level[];
-  units: Unit[];
-  levelSeq: number;
-  unitSeq: number;
+  floors: Floor[];
+  floorSeq: number;
+  /** Whether active-floor snapping also targets the floor immediately below. */
+  snapToFloorBelow: boolean;
   labelOffsets: LabelOffsetsMap;
   showDimensionsGlobal: boolean;
   /** Optional viewport (restored when present). */
@@ -315,12 +298,10 @@ export interface HistorySnapshotData {
   objects: PlanObject[];
   groups: Group[];
   groupSeq: number;
-  levels: Level[];
-  units: Unit[];
-  levelSeq: number;
-  unitSeq: number;
-  activeLevelId: string | null;
-  activeUnitId: string | null;
+  floors: Floor[];
+  floorSeq: number;
+  activeFloorId: string | null;
+  snapToFloorBelow: boolean;
   labelOffsets: LabelOffsetsMap;
   selectedId: string | null;
   selectedIds: string[];
