@@ -6,11 +6,10 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import type { PlanObject } from "@fp/types";
 import { buildSceneFromPlan } from "./build-scene";
-import { moveWithSlide, type SolidAABB } from "./collision";
 import {
   EYE_HEIGHT_M,
+  FLY_SPEED_M_S,
   LAYER_TOP_M,
-  PLAYER_RADIUS_M,
   SPRINT_SPEED_M_S,
   WALK_SPEED_M_S,
 } from "./constants";
@@ -83,7 +82,6 @@ export function createVisualizer(
   scene.add(controls.object);
 
   let planRoot: THREE.Group | null = null;
-  let solids: SolidAABB[] = [];
   let running = false;
   let raf = 0;
   let lastT = 0;
@@ -93,6 +91,8 @@ export function createVisualizer(
     back: false,
     left: false,
     right: false,
+    up: false,
+    down: false,
     sprint: false,
   };
 
@@ -120,6 +120,13 @@ export function createVisualizer(
       case "ArrowRight":
         keys.right = true;
         break;
+      case "Space":
+        keys.up = true;
+        e.preventDefault();
+        break;
+      case "KeyC":
+        keys.down = true;
+        break;
       case "ShiftLeft":
       case "ShiftRight":
         keys.sprint = true;
@@ -146,6 +153,12 @@ export function createVisualizer(
       case "KeyD":
       case "ArrowRight":
         keys.right = false;
+        break;
+      case "Space":
+        keys.up = false;
+        break;
+      case "KeyC":
+        keys.down = false;
         break;
       case "ShiftLeft":
       case "ShiftRight":
@@ -191,14 +204,12 @@ export function createVisualizer(
       });
       planRoot = null;
     }
-    solids = [];
   }
 
   function rebuild(objects: readonly PlanObject[]): void {
     clearPlan();
     const built = buildSceneFromPlan(objects);
     planRoot = built.root;
-    solids = built.solids;
     scene.add(planRoot);
 
     // Horizon grass well below terrain so it never z-fights lot slabs
@@ -243,39 +254,23 @@ export function createVisualizer(
 
     if (controls.isLocked) {
       const speed = (keys.sprint ? SPRINT_SPEED_M_S : WALK_SPEED_M_S) * dt;
-      const forward = new THREE.Vector3();
-      const right = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
-      forward.normalize();
-      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-      let dx = 0;
-      let dz = 0;
       if (keys.forward) {
-        dx += forward.x * speed;
-        dz += forward.z * speed;
+        controls.moveForward(speed);
       }
       if (keys.back) {
-        dx -= forward.x * speed;
-        dz -= forward.z * speed;
+        controls.moveForward(-speed);
       }
       if (keys.right) {
-        dx += right.x * speed;
-        dz += right.z * speed;
+        controls.moveRight(speed);
       }
       if (keys.left) {
-        dx -= right.x * speed;
-        dz -= right.z * speed;
+        controls.moveRight(-speed);
       }
 
-      if (dx !== 0 || dz !== 0) {
+      if (keys.up || keys.down) {
+        const verticalSpeed = (keys.sprint ? SPRINT_SPEED_M_S : FLY_SPEED_M_S) * dt;
         const pos = controls.object.position;
-        const next = moveWithSlide(pos.x, pos.z, dx, dz, PLAYER_RADIUS_M, solids);
-        pos.x = next.x;
-        pos.z = next.z;
-        pos.y = EYE_HEIGHT_M;
+        pos.y += (keys.up ? verticalSpeed : 0) - (keys.down ? verticalSpeed : 0);
       }
     }
 
@@ -295,7 +290,7 @@ export function createVisualizer(
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
     if (controls.isLocked) controls.unlock();
-    keys.forward = keys.back = keys.left = keys.right = keys.sprint = false;
+    keys.forward = keys.back = keys.left = keys.right = keys.up = keys.down = keys.sprint = false;
   }
 
   function dispose(): void {

@@ -227,7 +227,7 @@ export function floorPlanApp(): FloorPlanApp {
 
       // Space for pan mode (editor only)
       window.addEventListener("keydown", (e) => {
-        if (this.screen !== "editor") return;
+        if (this.screen !== "editor" || this.viewMode !== "layout") return;
         if (e.code === "Space" && !this.isTypingTarget(e.target)) {
           this.panState.spaceDown = true;
           this.$refs.viewport?.classList.add("is-panning");
@@ -235,6 +235,7 @@ export function floorPlanApp(): FloorPlanApp {
         }
       });
       window.addEventListener("keyup", (e) => {
+        if (this.viewMode !== "layout") return;
         if (e.code === "Space") {
           this.panState.spaceDown = false;
           if (!this.panState.active) {
@@ -2678,7 +2679,7 @@ export function floorPlanApp(): FloorPlanApp {
 
     onKeydown(e) {
       // Project browser: do not mutate plan with editor shortcuts
-      if (this.screen !== "editor") return;
+      if (this.screen !== "editor" || this.viewMode === "visualize") return;
       const mod = e.metaKey || e.ctrlKey;
       // Let inputs keep native text undo while focused
       if (mod && !this.isTypingTarget(e.target)) {
