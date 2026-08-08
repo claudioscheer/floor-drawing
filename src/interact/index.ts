@@ -13,7 +13,7 @@ import type {
   SnapGuides,
 } from "@fp/types";
 import { getMinSize } from "@fp/catalog";
-import { normalizeRotation } from "@fp/geometry";
+import { normalizeRotation, resizeRotatedRect } from "@fp/geometry";
 import { snapResize } from "@fp/snap";
 
 /**
@@ -164,41 +164,21 @@ export function resizeFromDelta(
   zoom: number,
   mins: MinSize
 ): Rect {
-  let x = raw.x;
-  let y = raw.y;
-  let width = raw.width;
-  let height = raw.height;
+  const deltaX = edges.left ? deltaRect.left : deltaRect.width;
+  const deltaY = edges.top ? deltaRect.top : deltaRect.height;
+  return resizeRotatedRect(
+    raw,
+    { x: deltaX / zoom, y: deltaY / zoom },
+    edges,
+    0,
+    mins
+  );
+}
 
-  const dLeft = deltaRect.left / zoom;
-  const dTop = deltaRect.top / zoom;
-  const dWidth = deltaRect.width / zoom;
-  const dHeight = deltaRect.height / zoom;
-
-  if (edges.left) {
-    const right = raw.x + raw.width;
-    x = raw.x + dLeft;
-    width = right - x;
-    if (width < mins.minW) {
-      width = mins.minW;
-      x = right - mins.minW;
-    }
-  } else if (edges.right) {
-    width = Math.max(mins.minW, raw.width + dWidth);
-  }
-
-  if (edges.top) {
-    const bottom = raw.y + raw.height;
-    y = raw.y + dTop;
-    height = bottom - y;
-    if (height < mins.minH) {
-      height = mins.minH;
-      y = bottom - mins.minH;
-    }
-  } else if (edges.bottom) {
-    height = Math.max(mins.minH, raw.height + dHeight);
-  }
-
-  return { x, y, width, height };
+/** Pointer movement reported by interact.js for a resize gesture. */
+interface ResizeMoveEvent {
+  delta: { x: number; y: number };
+  edges: ResizeEdges;
 }
 
 /**
@@ -250,10 +230,7 @@ export function setupInteract(appGetter: AppGetter): void {
           gesture.mode = "resize";
           el.setAttribute("data-lock-style", "1");
         },
-        move(event: {
-          deltaRect: { left: number; top: number; width: number; height: number };
-          edges: ResizeEdges;
-        }) {
+        move(event: ResizeMoveEvent) {
           const app = getApp();
           if (!app || gesture.mode !== "resize" || !gesture.id) return;
           const obj = app.objects.find((o) => o.id === gesture.id);
@@ -265,11 +242,11 @@ export function setupInteract(appGetter: AppGetter): void {
           const zoom = app.zoom || 1;
           const mins = getMinSize(obj.type);
 
-          const next = resizeFromDelta(
+          const next = resizeRotatedRect(
             gesture,
-            event.deltaRect,
+            { x: event.delta.x / zoom, y: event.delta.y / zoom },
             event.edges,
-            zoom,
+            obj.rotation,
             mins
           );
           gesture.x = next.x;
@@ -277,14 +254,19 @@ export function setupInteract(appGetter: AppGetter): void {
           gesture.width = next.width;
           gesture.height = next.height;
 
-          const snapped = snapResize(
-            next,
-            event.edges,
-            othersExcept(app, obj.id),
-            obj.type,
-            mins,
-            { useGrid: true, zoom }
-          );
+          // Axis-aligned snap targets cannot describe a rotated edge without
+          // moving the handle away from the pointer. Keep arbitrary-angle
+          // resize direct and stable; preserve existing snapping at 0°.
+          const snapped = normalizeRotation(obj.rotation)
+            ? { ...next, guides: { v: null, h: null }, active: false }
+            : snapResize(
+                next,
+                event.edges,
+                othersExcept(app, obj.id),
+                obj.type,
+                mins,
+                { useGrid: true, zoom }
+              );
 
           obj.x = snapped.x;
           obj.y = snapped.y;

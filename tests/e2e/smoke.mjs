@@ -82,7 +82,7 @@ async function main() {
           app &&
           app.screen === "projects" &&
           !!screen &&
-          !!(title && /projects/i.test(title.textContent || "")) &&
+          !!(title && /floor plans/i.test(title.textContent || "")) &&
           !!newBtn,
         screen: app && app.screen,
         hasTitle: !!(title && title.textContent),
@@ -165,6 +165,8 @@ async function main() {
         width: app.m(4),
         height: app.m(3),
         name: "E2E Estar",
+        levelId: app.activeLevelId,
+        unitId: app.activeUnitId,
       });
       app.objects = app.objects.concat([floor]);
       app.selectObject(floor.id);
@@ -191,6 +193,186 @@ async function main() {
     else pass(results, "select-focus", selectFocus);
     await page.screenshot({ path: path.join(OUT_DIR, "select-focus.png") });
 
+    // --- rotated object gestures: every type, side, and corner handle ---
+    const rotatedTypes = ["terrain", "room", "furniture", "wall", "window", "door"];
+    const rotatedHandles = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+    const rotatedFailures = [];
+    let rotatedResizeCount = 0;
+    let rotatedDragCount = 0;
+
+    for (const type of rotatedTypes) {
+      for (const handle of rotatedHandles) {
+        const setup = await page.evaluate(async (objectType) => {
+          const root = document.querySelector("#app");
+          const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+          app.objects = [];
+          app.selectedId = null;
+          app.selectedIds = [];
+          const obj = app.createObject(objectType, {
+            x: 500,
+            y: 300,
+            width: 240,
+            height: 100,
+            rotation: 45,
+            levelId: app.activeLevelId,
+            unitId: app.activeUnitId,
+          });
+          app.objects.push(obj);
+          app.selectObject(obj.id, { focus: false });
+          await new Promise((resolve) => app.$nextTick(resolve));
+          return {
+            zoom: app.zoom,
+            before: {
+              x: obj.x,
+              y: obj.y,
+              width: obj.width,
+              height: obj.height,
+            },
+          };
+        }, type);
+
+        const handleBox = await page.locator(".handle-" + handle).boundingBox();
+        if (!handleBox) {
+          rotatedFailures.push(type + ":" + handle + " handle missing");
+          continue;
+        }
+
+        // At 45°, move the pointer outward along the selected *local* handle axis.
+        const axis = Math.SQRT1_2;
+        let localX = 0;
+        let localY = 0;
+        if (handle.includes("e")) { localX += axis; localY += axis; }
+        if (handle.includes("w")) { localX -= axis; localY -= axis; }
+        if (handle.includes("s")) { localX -= axis; localY += axis; }
+        if (handle.includes("n")) { localX += axis; localY -= axis; }
+        const amount = 90 * setup.zoom;
+        const startX = handleBox.x + handleBox.width / 2;
+        const startY = handleBox.y + handleBox.height / 2;
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(startX + localX * amount, startY + localY * amount, { steps: 5 });
+        await page.mouse.up();
+
+        const after = await page.evaluate(() => {
+          const root = document.querySelector("#app");
+          const obj = window.Alpine.$data(root).objects[0];
+          return { x: obj.x, y: obj.y, width: obj.width, height: obj.height, rotation: obj.rotation };
+        });
+        const changesWidth = handle.includes("e") || handle.includes("w");
+        const changesHeight = handle.includes("n") || handle.includes("s");
+        const valid =
+          Number.isFinite(after.x) &&
+          Number.isFinite(after.y) &&
+          after.rotation === 45 &&
+          (!changesWidth || after.width > setup.before.width + 20) &&
+          (!changesHeight || after.height > setup.before.height + 20);
+        if (!valid) {
+          rotatedFailures.push(JSON.stringify({ type, handle, before: setup.before, after }));
+        } else {
+          rotatedResizeCount += 1;
+        }
+      }
+
+      const dragSetup = await page.evaluate(async (objectType) => {
+        const root = document.querySelector("#app");
+        const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+        app.objects = [];
+        app.selectedId = null;
+        app.selectedIds = [];
+        const obj = app.createObject(objectType, {
+          x: 500,
+          y: 300,
+          width: 240,
+          height: 100,
+          rotation: 45,
+          levelId: app.activeLevelId,
+          unitId: app.activeUnitId,
+        });
+        app.objects.push(obj);
+        app.selectObject(obj.id, { focus: false });
+        await new Promise((resolve) => app.$nextTick(resolve));
+        return { x: obj.x, y: obj.y };
+      }, type);
+      const objectBox = await page.locator(".fp-object").boundingBox();
+      if (!objectBox) {
+        rotatedFailures.push(type + ": drag target missing");
+        continue;
+      }
+      const dragX = objectBox.x + objectBox.width / 2;
+      const dragY = objectBox.y + objectBox.height / 2;
+      await page.mouse.move(dragX, dragY);
+      await page.mouse.down();
+      await page.mouse.move(dragX + 50, dragY + 30, { steps: 5 });
+      await page.mouse.up();
+      const dragAfter = await page.evaluate(() => {
+        const root = document.querySelector("#app");
+        const obj = window.Alpine.$data(root).objects[0];
+        return { x: obj.x, y: obj.y };
+      });
+      if (dragAfter.x > dragSetup.x + 100 && dragAfter.y > dragSetup.y + 50) {
+        rotatedDragCount += 1;
+      } else {
+        rotatedFailures.push(JSON.stringify({ type, dragSetup, dragAfter }));
+      }
+    }
+
+    // Width/height inspector edits must remain usable after rotation too.
+    await page.evaluate(async () => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      app.objects = [];
+      const obj = app.createObject("furniture", {
+        x: 500,
+        y: 300,
+        width: 240,
+        height: 100,
+        rotation: 45,
+        levelId: app.activeLevelId,
+        unitId: app.activeUnitId,
+      });
+      app.objects.push(obj);
+      app.selectObject(obj.id, { focus: false });
+      await new Promise((resolve) => app.$nextTick(resolve));
+    });
+    await page.locator("#prop-w").fill("3.2");
+    await page.locator("#prop-w").press("Tab");
+    await page.locator("#prop-h").fill("1.4");
+    await page.locator("#prop-h").press("Tab");
+    const inspectorSize = await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const obj = window.Alpine.$data(root).objects[0];
+      return { width: obj.width, height: obj.height, rotation: obj.rotation };
+    });
+    const inspectorOk =
+      inspectorSize.width === 320 &&
+      inspectorSize.height === 140 &&
+      inspectorSize.rotation === 45;
+
+    const cursorDirections = await page.evaluate(async () => {
+      const root = document.querySelector("#app");
+      const app = window.Alpine.$data(root);
+      app.patchObject(app.objects[0].id, { rotation: 90 });
+      await new Promise((resolve) => app.$nextTick(resolve));
+      return {
+        north: getComputedStyle(document.querySelector(".handle-n")).cursor,
+        east: getComputedStyle(document.querySelector(".handle-e")).cursor,
+      };
+    });
+    const cursorOk =
+      cursorDirections.north === "ew-resize" &&
+      cursorDirections.east === "ns-resize";
+
+    if (rotatedFailures.length || !inspectorOk || !cursorOk) {
+      fail(results, "rotated-gestures", JSON.stringify({ rotatedFailures, inspectorSize, cursorDirections }));
+    } else {
+      pass(results, "rotated-gestures", {
+        resized: rotatedResizeCount,
+        dragged: rotatedDragCount,
+        inspectorSize,
+        cursorDirections,
+      });
+    }
+
     // --- feature APIs ---
     const features = await page.evaluate(async () => {
       const app = (function(){ const root = document.querySelector("#app"); return root && window.Alpine ? window.Alpine.$data(root) : null; })();
@@ -205,6 +387,8 @@ async function main() {
         width: app.m(2),
         height: app.m(2),
         name: "E2E Floor",
+        levelId: app.activeLevelId,
+        unitId: app.activeUnitId,
       });
       app.objects = app.objects.concat([placed]);
       app.selectedIds = [placed.id];
@@ -275,6 +459,8 @@ async function main() {
         width: 100,
         height: 100,
         name: "E2E Peer",
+        levelId: app.activeLevelId,
+        unitId: app.activeUnitId,
       });
       app.pushHistory();
       app.objects = app.objects.concat([b]);
@@ -339,6 +525,7 @@ async function main() {
         !/favicon/i.test(e.message || "") &&
         !/\/api\/projects/i.test(e.message || "") &&
         !/Failed to fetch/i.test(e.message || "") &&
+        !/Bad Gateway/i.test(e.message || "") &&
         !/NetworkError/i.test(e.message || "") &&
         !/Load projects failed/i.test(e.message || "") &&
         !/List projects failed/i.test(e.message || "")
