@@ -155,26 +155,13 @@ function addDoorLeaf(root: THREE.Group, cut: OpeningCut): void {
   const leafW = Math.max(0.4, cut.openingLengthM - 0.04);
   const wood = mat(0x6b4f2a, { rough: 0.7 });
   const leaf = boxMesh(leafT, leafH, leafW, wood);
-
-  // Open ~90° into the room (hinge on one side)
-  if (cut.horizontal) {
-    // Wall runs X; leaf swings around vertical hinge at start of opening
-    const hingeX =
-      cut.hinge === "end" ? cut.maxX - 0.02 : cut.minX + 0.02;
-    leaf.position.set(hingeX, leafH / 2, cut.cz);
-    // Open leaf perpendicular to wall (into -Z or +Z based on opens)
-    const swing = cut.opens === "pos" ? 1 : -1;
-    leaf.rotation.y = (Math.PI / 2) * swing;
-    // Shift so leaf sits at hinge
-    leaf.geometry.translate(0, 0, leafW / 2 * (cut.hinge === "end" ? -1 : 1));
-  } else {
-    const hingeZ =
-      cut.hinge === "end" ? cut.maxZ - 0.02 : cut.minZ + 0.02;
-    leaf.position.set(cut.cx, leafH / 2, hingeZ);
-    const swing = cut.opens === "pos" ? 1 : -1;
-    leaf.rotation.y = (Math.PI / 2) * (1 - swing);
-    leaf.geometry.translate(leafW / 2 * (cut.hinge === "end" ? -1 : 1), 0, 0);
-  }
+  leaf.position.set(
+    cut.hingeX + (cut.openDirectionX * leafW) / 2,
+    leafH / 2,
+    cut.hingeZ + (cut.openDirectionZ * leafW) / 2
+  );
+  leaf.rotation.y = Math.atan2(cut.openDirectionX, cut.openDirectionZ);
+  leaf.name = "door-leaf";
   root.add(leaf);
 }
 

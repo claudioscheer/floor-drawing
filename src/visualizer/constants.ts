@@ -46,6 +46,9 @@ export const WALK_SPEED_M_S = 2.8;
 /** Sprint speed (m/s). */
 export const SPRINT_SPEED_M_S = 5.0;
 
+/** Vertical fly speed (m/s) while holding Space or C. */
+export const FLY_SPEED_M_S = 3.5;
+
 /** Expand door opening slightly for walkability. */
 export const DOOR_CLEARANCE_M = 0.08;
 
