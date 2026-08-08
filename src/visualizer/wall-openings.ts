@@ -2,7 +2,7 @@
  * Split axis-aligned walls around door / window openings for 3D mesh + collision.
  */
 
-import { normalizeRotation, worldAABB } from "@fp/geometry";
+import { normalizeRotation, rotatePoint, worldAABB } from "@fp/geometry";
 import type { PlanObject, Rect } from "@fp/types";
 import { PX_PER_METER } from "@fp/units";
 import { OPENING_PAD_M } from "./constants";
@@ -98,9 +98,7 @@ function subtractIntervals(span: Interval, cuts: Interval[]): Interval[] {
   return result;
 }
 
-export interface OpeningCut {
-  /** Door: full-height gap. Window: mid-height glass band. */
-  kind: "door" | "window";
+interface OpeningCutBase {
   minX: number;
   maxX: number;
   minZ: number;
@@ -115,8 +113,73 @@ export interface OpeningCut {
   cx: number;
   cz: number;
   name: string;
-  hinge?: string;
-  opens?: string;
+}
+
+/** Door opening and its exact 2D swing pose, in world meters. */
+export interface DoorOpeningCut extends OpeningCutBase {
+  kind: "door";
+  /** Exact 2D symbol hinge, converted to world meters. */
+  hingeX: number;
+  hingeZ: number;
+  /** Unit direction from hinge toward the open leaf. */
+  openDirectionX: number;
+  openDirectionZ: number;
+}
+
+/** Window opening; the pane is centered in the wall. */
+export interface WindowOpeningCut extends OpeningCutBase {
+  kind: "window";
+}
+
+/** Door or window opening cut from an axis-aligned wall. */
+export type OpeningCut = DoorOpeningCut | WindowOpeningCut;
+
+/** Exact hinge and open-leaf direction used by the 2D door symbol. */
+function doorLeafPose(door: PlanObject): {
+  hingeX: number;
+  hingeZ: number;
+  openDirectionX: number;
+  openDirectionZ: number;
+} {
+  const horizontal = door.width >= door.height;
+  const hingeAtEnd = door.hinge === "end";
+  const opensPositive = door.opens === "pos";
+  const localHingeX = horizontal
+    ? hingeAtEnd
+      ? door.width
+      : 0
+    : opensPositive
+      ? door.width
+      : 0;
+  const localHingeZ = horizontal
+    ? opensPositive
+      ? 0
+      : door.height
+    : hingeAtEnd
+      ? door.height
+      : 0;
+  const localDirectionX = horizontal ? 0 : opensPositive ? 1 : -1;
+  const localDirectionZ = horizontal ? (opensPositive ? 1 : -1) : 0;
+  const rotation = normalizeRotation(door.rotation);
+  const centerX = door.x + door.width / 2;
+  const centerZ = door.y + door.height / 2;
+  const hinge = rotatePoint(
+    door.x + localHingeX,
+    door.y + localHingeZ,
+    centerX,
+    centerZ,
+    rotation
+  );
+  const rotationRad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rotationRad);
+  const sin = Math.sin(rotationRad);
+
+  return {
+    hingeX: pxToM(hinge.x),
+    hingeZ: pxToM(hinge.y),
+    openDirectionX: localDirectionX * cos - localDirectionZ * sin,
+    openDirectionZ: localDirectionX * sin + localDirectionZ * cos,
+  };
 }
 
 /**
@@ -162,6 +225,7 @@ export function buildWallSegments(
       const dAABB = worldAABB(door);
       if (!overlapsWall(wAABB, dAABB, padPx)) continue;
       const dM = rectM(dAABB);
+      const leafPose = doorLeafPose(door);
       if (horizontal) {
         doorCuts.push({
           a: Math.max(wM.minX, dM.minX - OPENING_PAD_M),
@@ -179,8 +243,7 @@ export function buildWallSegments(
           cx: (dM.minX + dM.maxX) / 2,
           cz: (wM.minZ + wM.maxZ) / 2,
           name: door.name,
-          hinge: door.hinge,
-          opens: door.opens,
+          ...leafPose,
         });
       } else {
         doorCuts.push({
@@ -199,8 +262,7 @@ export function buildWallSegments(
           cx: (wM.minX + wM.maxX) / 2,
           cz: (dM.minZ + dM.maxZ) / 2,
           name: door.name,
-          hinge: door.hinge,
-          opens: door.opens,
+          ...leafPose,
         });
       }
     }

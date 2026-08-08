@@ -154,37 +154,15 @@ function addDoorLeaf(root: THREE.Group, cut: OpeningCut): void {
   const leafT = 0.04;
   const leafW = Math.max(0.4, cut.openingLengthM - 0.04);
   const wood = mat(0x6b4f2a, { rough: 0.7 });
-  const opensPositive = cut.opens === "pos";
-
-  // The plan symbol is shown open at 90°. Place the 3D leaf from the same
-  // wall-face hinge and extend it perpendicular to the parent wall.
-  if (cut.horizontal) {
-    const hingeX =
-      cut.hinge === "end" ? cut.maxX - 0.02 : cut.minX + 0.02;
-    const hingeZ = opensPositive ? cut.minZ : cut.maxZ;
-    const openDirectionZ = opensPositive ? 1 : -1;
-    const leaf = boxMesh(leafT, leafH, leafW, wood);
-    leaf.position.set(
-      hingeX,
-      leafH / 2,
-      hingeZ + (openDirectionZ * leafW) / 2
-    );
-    leaf.name = "door-leaf";
-    root.add(leaf);
-  } else {
-    const hingeX = opensPositive ? cut.maxX : cut.minX;
-    const hingeZ =
-      cut.hinge === "end" ? cut.maxZ - 0.02 : cut.minZ + 0.02;
-    const openDirectionX = opensPositive ? 1 : -1;
-    const leaf = boxMesh(leafW, leafH, leafT, wood);
-    leaf.position.set(
-      hingeX + (openDirectionX * leafW) / 2,
-      leafH / 2,
-      hingeZ
-    );
-    leaf.name = "door-leaf";
-    root.add(leaf);
-  }
+  const leaf = boxMesh(leafT, leafH, leafW, wood);
+  leaf.position.set(
+    cut.hingeX + (cut.openDirectionX * leafW) / 2,
+    leafH / 2,
+    cut.hingeZ + (cut.openDirectionZ * leafW) / 2
+  );
+  leaf.rotation.y = Math.atan2(cut.openDirectionX, cut.openDirectionZ);
+  leaf.name = "door-leaf";
+  root.add(leaf);
 }
 
 function addWindowGlass(root: THREE.Group, cut: OpeningCut): void {
