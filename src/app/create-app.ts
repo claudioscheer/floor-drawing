@@ -24,7 +24,12 @@ import {
   doorSectorPath,
   doorSymbolPath,
 } from "@fp/doors";
-import { clampOpacity, normalizeRotation, worldAABB } from "@fp/geometry";
+import {
+  clampOpacity,
+  normalizeRotation,
+  resizeCursorForHandle,
+  worldAABB,
+} from "@fp/geometry";
 import { setupInteract } from "@fp/interact";
 import {
   buildPlanDocument,
@@ -1117,6 +1122,14 @@ export function floorPlanApp(): FloorPlanApp {
         // CSS var so inner labels can counter-rotate and stay upright
         "--obj-rot": rot + "deg",
         "--hit-pad": hitPad ? hitPad + "px" : "0px",
+        "--resize-cursor-n": resizeCursorForHandle("n", rot),
+        "--resize-cursor-s": resizeCursorForHandle("s", rot),
+        "--resize-cursor-e": resizeCursorForHandle("e", rot),
+        "--resize-cursor-w": resizeCursorForHandle("w", rot),
+        "--resize-cursor-ne": resizeCursorForHandle("ne", rot),
+        "--resize-cursor-nw": resizeCursorForHandle("nw", rot),
+        "--resize-cursor-se": resizeCursorForHandle("se", rot),
+        "--resize-cursor-sw": resizeCursorForHandle("sw", rot),
         zIndex: String(z),
         display: obj.visible === false ? "none" : null,
         opacity: String(opacity),

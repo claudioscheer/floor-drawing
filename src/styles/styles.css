@@ -2327,52 +2327,52 @@ button {
   top: -4px;
   left: 50%;
   margin-left: -3.5px;
-  cursor: ns-resize;
+  cursor: var(--resize-cursor-n, ns-resize);
 }
 
 .handle-s {
   bottom: -4px;
   left: 50%;
   margin-left: -3.5px;
-  cursor: ns-resize;
+  cursor: var(--resize-cursor-s, ns-resize);
 }
 
 .handle-e {
   right: -4px;
   top: 50%;
   margin-top: -3.5px;
-  cursor: ew-resize;
+  cursor: var(--resize-cursor-e, ew-resize);
 }
 
 .handle-w {
   left: -4px;
   top: 50%;
   margin-top: -3.5px;
-  cursor: ew-resize;
+  cursor: var(--resize-cursor-w, ew-resize);
 }
 
 .handle-ne {
   top: -4px;
   right: -4px;
-  cursor: nesw-resize;
+  cursor: var(--resize-cursor-ne, nesw-resize);
 }
 
 .handle-nw {
   top: -4px;
   left: -4px;
-  cursor: nwse-resize;
+  cursor: var(--resize-cursor-nw, nwse-resize);
 }
 
 .handle-se {
   bottom: -4px;
   right: -4px;
-  cursor: nwse-resize;
+  cursor: var(--resize-cursor-se, nwse-resize);
 }
 
 .handle-sw {
   bottom: -4px;
   left: -4px;
-  cursor: nesw-resize;
+  cursor: var(--resize-cursor-sw, nesw-resize);
 }
 
 /* Snap guides */

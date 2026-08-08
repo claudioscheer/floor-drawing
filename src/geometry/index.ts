@@ -3,7 +3,14 @@
  * DOM-free; operates on plan rectangles in world pixels.
  */
 
-import type { Point, Rect, TransformedRect } from "@fp/types";
+import type {
+  MinSize,
+  Point,
+  Rect,
+  ResizeEdges,
+  ResizeHandle,
+  TransformedRect,
+} from "@fp/types";
 
 /**
  * Normalize rotation to [0, 360).
@@ -97,4 +104,116 @@ export function worldAABB(obj: TransformedRect): Rect {
     maxY = Math.max(maxY, p.y);
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * Resize a rectangle from a pointer movement in world coordinates.
+ *
+ * The pointer movement is projected onto the object's rotated local axes. This
+ * means that, for example, dragging the visual east handle of a 90° object
+ * changes its width as the pointer moves down the screen. The opposite local
+ * edge (or corner) remains fixed in world space.
+ *
+ * @param rect - Current unrotated local box in world px
+ * @param worldDelta - Pointer movement since the previous event, in world px
+ * @param edges - Active local resize edges
+ * @param rotation - Clockwise CSS rotation in degrees
+ * @param mins - Minimum width and height in world px
+ * @returns Resized local box in world px
+ */
+export function resizeRotatedRect(
+  rect: Rect,
+  worldDelta: Point,
+  edges: ResizeEdges,
+  rotation: number,
+  mins: MinSize
+): Rect {
+  const degrees = normalizeRotation(rotation);
+  const radians = (degrees * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  // Unit vectors of the object's local width and height axes in world space.
+  const widthAxis = { x: cos, y: sin };
+  const heightAxis = { x: -sin, y: cos };
+  const widthMotion = worldDelta.x * widthAxis.x + worldDelta.y * widthAxis.y;
+  const heightMotion =
+    worldDelta.x * heightAxis.x + worldDelta.y * heightAxis.y;
+
+  let width = rect.width;
+  let height = rect.height;
+  if (edges.left) width -= widthMotion;
+  if (edges.right) width += widthMotion;
+  if (edges.top) height -= heightMotion;
+  if (edges.bottom) height += heightMotion;
+  width = Math.max(mins.minW, width);
+  height = Math.max(mins.minH, height);
+
+  const widthChange = width - rect.width;
+  const heightChange = height - rect.height;
+  const center = objectCenter(rect);
+
+  // Move the center by half of each actual size change so the edge opposite
+  // the handle is invariant after rotation and minimum-size clamping.
+  let centerX = center.x;
+  let centerY = center.y;
+  if (edges.left) {
+    centerX -= (widthAxis.x * widthChange) / 2;
+    centerY -= (widthAxis.y * widthChange) / 2;
+  }
+  if (edges.right) {
+    centerX += (widthAxis.x * widthChange) / 2;
+    centerY += (widthAxis.y * widthChange) / 2;
+  }
+  if (edges.top) {
+    centerX -= (heightAxis.x * heightChange) / 2;
+    centerY -= (heightAxis.y * heightChange) / 2;
+  }
+  if (edges.bottom) {
+    centerX += (heightAxis.x * heightChange) / 2;
+    centerY += (heightAxis.y * heightChange) / 2;
+  }
+
+  return {
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+    width,
+    height,
+  };
+}
+
+/** CSS resize cursor keywords supported by all target browsers. */
+export type ResizeCursor = "ew-resize" | "ns-resize" | "nwse-resize" | "nesw-resize";
+
+/**
+ * Select the screen-space cursor for a handle after object rotation.
+ *
+ * CSS cursor keywords describe screen axes, while handle names describe local
+ * object axes. This converts between them and rounds to the nearest supported
+ * horizontal, vertical, or diagonal cursor.
+ *
+ * @param handle - Handle on the unrotated local box
+ * @param rotation - Clockwise CSS rotation in degrees
+ * @returns Screen-space CSS cursor keyword
+ */
+export function resizeCursorForHandle(
+  handle: ResizeHandle,
+  rotation: number
+): ResizeCursor {
+  const localAngle: Record<ResizeHandle, number> = {
+    e: 0,
+    se: 45,
+    s: 90,
+    sw: 135,
+    w: 180,
+    nw: 225,
+    n: 270,
+    ne: 315,
+  };
+  const lineAngle = normalizeRotation(localAngle[handle] + rotation) % 180;
+
+  if (lineAngle < 22.5 || lineAngle >= 157.5) return "ew-resize";
+  if (lineAngle < 67.5) return "nwse-resize";
+  if (lineAngle < 112.5) return "ns-resize";
+  return "nesw-resize";
 }

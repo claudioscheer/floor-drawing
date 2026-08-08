@@ -222,6 +222,9 @@ export interface ResizeEdges {
   bottom?: boolean;
 }
 
+/** Named resize handles on an object's unrotated local box. */
+export type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
 /** Options for snap engines. */
 export interface SnapOptions {
   /**
