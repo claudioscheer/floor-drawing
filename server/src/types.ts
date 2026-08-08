@@ -8,10 +8,9 @@ export interface PlanDocument {
   objects: unknown[];
   groups: unknown[];
   groupSeq: number;
-  levels?: unknown[];
-  units?: unknown[];
-  levelSeq?: number;
-  unitSeq?: number;
+  floors?: unknown[];
+  floorSeq?: number;
+  snapToFloorBelow?: boolean;
   labelOffsets: Record<string, unknown>;
   showDimensionsGlobal: boolean;
   zoom?: number;
@@ -25,10 +24,9 @@ export function emptyPlanDocument(): PlanDocument {
     objects: [],
     groups: [],
     groupSeq: 1,
-    levels: [{ id: "level-1", name: "Ground", order: 0 }],
-    units: [{ id: "unit-1", name: "Main", levelId: "level-1" }],
-    levelSeq: 1,
-    unitSeq: 1,
+    floors: [{ id: "floor-1", name: "Ground", order: 0 }],
+    floorSeq: 1,
+    snapToFloorBelow: false,
     labelOffsets: {},
     showDimensionsGlobal: false,
   };
@@ -60,6 +58,12 @@ export function normalizePlanDocument(value: unknown): PlanDocument {
     objects: Array.isArray(v.objects) ? v.objects : [],
     groups: Array.isArray(v.groups) ? v.groups : [],
     groupSeq: typeof v.groupSeq === "number" && Number.isFinite(v.groupSeq) ? v.groupSeq : 1,
+    floors: Array.isArray(v.floors) ? v.floors : base.floors,
+    floorSeq:
+      typeof v.floorSeq === "number" && Number.isFinite(v.floorSeq)
+        ? v.floorSeq
+        : base.floorSeq,
+    snapToFloorBelow: !!v.snapToFloorBelow,
     labelOffsets:
       v.labelOffsets && typeof v.labelOffsets === "object" && !Array.isArray(v.labelOffsets)
         ? (v.labelOffsets as Record<string, unknown>)

@@ -222,7 +222,7 @@ button {
   cursor: not-allowed;
 }
 
-/* Levels + units bar (under app header) */
+/* Floors bar (under app header) */
 .structure-bar {
   flex-shrink: 0;
   display: flex;
@@ -283,20 +283,29 @@ button {
   color: #fff;
 }
 
-.structure-tab-unit.is-active {
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
-  color: var(--accent);
-}
-
-.structure-tab-shared.is-active {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
 .structure-add {
   margin-left: 2px;
+}
+
+.floor-snap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.floor-snap-toggle input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.floor-snap-toggle.is-disabled {
+  color: var(--text-faint);
+  cursor: default;
 }
 
 .structure-hint {
@@ -305,19 +314,7 @@ button {
   margin-left: auto;
 }
 
-.structure-drawing-into {
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 3px 8px;
-  border-radius: 2px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-/* Small help control, sits immediately after LEVEL / UNIT labels */
+/* Small help control, sits immediately after the floor label. */
 .structure-help-btn {
   flex-shrink: 0;
   width: 16px;
@@ -1151,29 +1148,6 @@ button {
   text-align: right;
 }
 
-.layer-unit-tag {
-  flex-shrink: 0;
-  max-width: 72px;
-  padding: 0 5px;
-  height: 16px;
-  line-height: 16px;
-  border-radius: 2px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.layer-unit-tag.is-shared {
-  border-color: var(--border);
-  background: var(--surface-2);
-  color: var(--text-muted);
-}
-
 .layer-icon-btn {
   flex-shrink: 0;
   width: 20px;
@@ -1827,6 +1801,18 @@ button {
   box-sizing: border-box;
 }
 
+/* The closest lower floor is a visual drafting reference, never a hit target. */
+.reference-floor-layer,
+.fp-object--reference,
+.fp-object--reference::before,
+.fp-object--reference * {
+  pointer-events: none !important;
+}
+
+.fp-object--reference {
+  filter: grayscale(0.35);
+}
+
 /*
  * Expanded hit targets for thin plan elements (wall thickness ≈ 10 world px).
  * At default zoom that is ~2 screen px — nearly unclickable. --hit-pad is set
@@ -2077,6 +2063,12 @@ button {
   /* Above paint-order object z-index (type*1000+idx), below selected (500000+) */
   z-index: 450000;
   overflow: visible;
+}
+
+.reference-door-swing-layer {
+  z-index: 10;
+  opacity: 0.24;
+  filter: grayscale(0.35);
 }
 
 .door-swing-svg {

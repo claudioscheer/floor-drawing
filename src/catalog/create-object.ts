@@ -82,17 +82,10 @@ export function createObject(
       overrides.groupId != null && overrides.groupId !== ""
         ? String(overrides.groupId)
         : null,
-    levelId:
-      overrides.levelId != null && overrides.levelId !== ""
-        ? String(overrides.levelId)
+    floorId:
+      overrides.floorId != null && overrides.floorId !== ""
+        ? String(overrides.floorId)
         : "",
-    // null = shared on the level (not inside a unit / apartment)
-    unitId:
-      overrides.unitId === null
-        ? null
-        : overrides.unitId != null && overrides.unitId !== ""
-          ? String(overrides.unitId)
-          : null,
     opacity: clampOpacity(
       overrides.opacity !== undefined ? overrides.opacity : (def.defaults.opacity ?? 1)
     ),

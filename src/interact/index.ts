@@ -24,6 +24,7 @@ export interface InteractApp {
   objects: PlanObject[];
   zoom: number;
   snapGuides: SnapGuides;
+  snapPartners(): PlanObject[];
   pushHistory(): void;
   selectObject(id: string, opts?: SelectOptions): void;
   patchObject(id: string, patch: Partial<PlanObject>): void;
@@ -51,7 +52,7 @@ const gesture: {
 };
 
 function othersExcept(app: InteractApp, id: string): PlanObject[] {
-  return app.objects.filter((o) => o.id !== id);
+  return app.snapPartners().filter((object) => object.id !== id);
 }
 
 function clearGuides(app: InteractApp | null): void {
@@ -191,11 +192,12 @@ export function setupInteract(appGetter: AppGetter): void {
 
   try {
     interact(".fp-object").unset();
+    interact(".fp-object:not(.fp-object--reference)").unset();
   } catch {
     /* ignore */
   }
 
-  interact(".fp-object")
+  interact(".fp-object:not(.fp-object--reference)")
     .styleCursor(false)
     .draggable(false)
     .resizable({

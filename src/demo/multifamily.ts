@@ -646,23 +646,16 @@ export function createDemoLayout(): DemoLayout {
   });
 
   const structure = createDefaultStructure();
-  const levelId = structure.levels[0].id;
-  // Lot / setbacks / parking / stairs-like site work → level-shared (no unit)
-  // Interior apt content stays on the default unit for now
-  const sharedName =
-    /lot|recuo|faixa|vaga|moto|circul|cobertura|portão|portal|escada|stair/i;
+  const floorId = structure.floors[0].id;
   for (const o of objs) {
-    o.levelId = levelId;
-    o.unitId = sharedName.test(o.name || "") ? null : structure.units[0].id;
+    o.floorId = floorId;
   }
 
   return {
     objects: objs,
     groups: groups,
     groupSeq: groups.length + 1,
-    levels: structure.levels,
-    units: structure.units,
-    levelSeq: structure.levelSeq,
-    unitSeq: structure.unitSeq,
+    floors: structure.floors,
+    floorSeq: structure.floorSeq,
   };
 }

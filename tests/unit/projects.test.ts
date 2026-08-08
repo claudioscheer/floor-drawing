@@ -36,8 +36,7 @@ const sampleObject = {
   visible: true,
   locked: false,
   groupId: null,
-  levelId: structure.levels[0].id,
-  unitId: structure.units[0].id,
+  floorId: structure.floors[0].id,
   opacity: 1,
   showDimensions: false,
   dimOffW: { x: 0, y: 0 },
@@ -45,10 +44,9 @@ const sampleObject = {
 } as PlanObject;
 
 const structureFields = {
-  levels: structure.levels,
-  units: structure.units,
-  levelSeq: structure.levelSeq,
-  unitSeq: structure.unitSeq,
+  floors: structure.floors,
+  floorSeq: structure.floorSeq,
+  snapToFloorBelow: false,
 };
 
 describe("emptyPlanDocument / normalizePlanDocument", () => {
@@ -59,6 +57,7 @@ describe("emptyPlanDocument / normalizePlanDocument", () => {
     expect(doc.groupSeq).toBe(1);
     expect(doc.labelOffsets).toEqual({});
     expect(doc.showDimensionsGlobal).toBe(false);
+    expect(doc.snapToFloorBelow).toBe(false);
   });
 
   it("fills defaults for malformed input", () => {
@@ -70,11 +69,13 @@ describe("emptyPlanDocument / normalizePlanDocument", () => {
       groupSeq: 3,
       labelOffsets: { "floor-1": { w: { x: 1, y: 2 }, h: { x: 0, y: 0 }, n: { x: 0, y: 0 } } },
       showDimensionsGlobal: true,
+      snapToFloorBelow: true,
       zoom: 0.5,
     });
     expect(doc.objects).toHaveLength(1);
     expect(doc.groupSeq).toBe(3);
     expect(doc.showDimensionsGlobal).toBe(true);
+    expect(doc.snapToFloorBelow).toBe(true);
     expect(doc.zoom).toBe(0.5);
   });
 
@@ -87,43 +88,46 @@ describe("emptyPlanDocument / normalizePlanDocument", () => {
     });
     expect(doc.objects[0].type).toBe("room");
     expect(doc.objects[1].type).toBe("furniture");
-    expect(doc.levels.length).toBeGreaterThanOrEqual(1);
-    expect(doc.units.length).toBeGreaterThanOrEqual(1);
-    expect(doc.objects[0].levelId).toBeTruthy();
-    // Legacy objects without a unit stay level-shared (null)
-    expect(doc.objects[0].unitId).toBeNull();
-    expect(doc.objects[1].unitId).toBeNull();
+    expect(doc.floors.length).toBeGreaterThanOrEqual(1);
+    expect(doc.objects[0].floorId).toBeTruthy();
   });
 
-  it("keeps null unitId as level-shared", () => {
+  it("assigns unknown object floors to Ground", () => {
     const doc = normalizePlanDocument({
       objects: [
         {
           id: "t1",
           type: "terrain",
           name: "Lot",
-          levelId: "level-1",
-          unitId: null,
+          floorId: "missing",
         },
         {
           id: "r1",
           type: "room",
           name: "Estar",
-          levelId: "level-1",
-          unitId: "unit-1",
+          floorId: "floor-1",
         },
       ],
-      levels: [{ id: "level-1", name: "Ground", order: 0 }],
-      units: [{ id: "unit-1", name: "Apt 1", levelId: "level-1" }],
+      floors: [{ id: "floor-1", name: "Ground", order: 0 }],
     });
-    expect(doc.objects[0].unitId).toBeNull();
-    expect(doc.objects[1].unitId).toBe("unit-1");
+    expect(doc.objects[0].floorId).toBe("floor-1");
+    expect(doc.objects[1].floorId).toBe("floor-1");
   });
 
-  it("seeds default Ground + Main structure when missing", () => {
+  it("keeps terrain on Ground even when stored on a higher floor", () => {
+    const doc = normalizePlanDocument({
+      floors: [
+        { id: "floor-1", name: "Ground", order: 0 },
+        { id: "floor-2", name: "Floor 1", order: 1 },
+      ],
+      objects: [{ id: "terrain", type: "terrain", name: "Site", floorId: "floor-2" }],
+    });
+    expect(doc.objects[0].floorId).toBe("floor-1");
+  });
+
+  it("seeds a default Ground floor when missing", () => {
     const doc = emptyPlanDocument();
-    expect(doc.levels[0].name).toBe("Ground");
-    expect(doc.units[0].name).toBe("Main");
+    expect(doc.floors[0].name).toBe("Ground");
   });
 });
 
@@ -144,7 +148,7 @@ describe("buildPlanDocument", () => {
     expect(doc.objects).toEqual(objects);
     expect(doc.objects).not.toBe(objects);
     expect(doc.groupSeq).toBe(2);
-    expect(doc.levels).toHaveLength(1);
+    expect(doc.floors).toHaveLength(1);
     expect(doc.zoom).toBe(0.3);
     expect(doc.panX).toBe(10);
     expect(doc.panY).toBe(20);
@@ -191,6 +195,7 @@ describe("planDocumentToExport", () => {
     expect(exp.exportedAt).toMatch(/^\d{4}-/);
     expect(exp.objects[0].dimOffW).toEqual({ x: 5, y: 6 });
     expect(exp.objects[0].dimOffN).toEqual({ x: 1, y: 2 });
+    expect(exp.snapToFloorBelow).toBe(false);
   });
 });
 

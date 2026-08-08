@@ -31,13 +31,9 @@ export {
 } from "./routes";
 
 export {
-  DEFAULT_LEVEL_ID,
-  DEFAULT_UNIT_ID,
+  DEFAULT_FLOOR_ID,
   createDefaultStructure,
-  normalizeLevels,
-  normalizeUnits,
+  normalizeFloors,
   ensureObjectStructure,
-  unitsOnLevel,
-  nextLevelName,
-  nextUnitName,
+  nextFloorName,
 } from "./structure";

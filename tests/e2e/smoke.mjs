@@ -112,6 +112,53 @@ async function main() {
     });
     await page.waitForTimeout(80);
 
+    // --- floors: Ground terrain, lower-floor reference, optional snapping ---
+    const floorWorkflow = await page.evaluate(async () => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      if (!app) return { ok: false, reason: "missing app" };
+
+      const groundId = app.activeFloorId;
+      const terrain = app.createObject("terrain", {
+        x: 0,
+        y: 0,
+        width: app.m(12),
+        height: app.m(8),
+        name: "Ground site",
+        floorId: groundId,
+      });
+      app.objects = [terrain];
+      app.addFloor();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+
+      const referenceBeforeSnap = app.referenceObjects();
+      const terrainBlocked = !app.canPlaceTerrain();
+      app.setTool("terrain");
+      const terrainToolBlocked = app.activeTool === "select";
+      const partnersWithoutReference = app.snapPartners();
+      app.setSnapToFloorBelow(true);
+      const partnersWithReference = app.snapPartners();
+      const ghostCount = document.querySelectorAll(".fp-object--reference").length;
+      const floorCountBeforeDelete = app.floors.length;
+      app.deleteFloor(groundId);
+
+      return {
+        ok:
+          app.floors.length === floorCountBeforeDelete &&
+          referenceBeforeSnap.some((object) => object.id === terrain.id) &&
+          ghostCount === referenceBeforeSnap.length &&
+          terrainBlocked &&
+          terrainToolBlocked &&
+          !partnersWithoutReference.some((object) => object.id === terrain.id) &&
+          partnersWithReference.some((object) => object.id === terrain.id) &&
+          app.snapToFloorBelow,
+        floors: app.floors.length,
+        referenceCount: referenceBeforeSnap.length,
+      };
+    });
+    if (!floorWorkflow.ok) fail(results, "floor-workflow", JSON.stringify(floorWorkflow));
+    else pass(results, "floor-workflow", floorWorkflow);
+
     // --- tools palette visible ---
     const toolsLayout = await page.evaluate(() => {
       const palette = document.querySelector(".palette-scroll");
@@ -165,8 +212,7 @@ async function main() {
         width: app.m(4),
         height: app.m(3),
         name: "E2E Estar",
-        levelId: app.activeLevelId,
-        unitId: app.activeUnitId,
+        floorId: app.activeFloorId,
       });
       app.objects = app.objects.concat([floor]);
       app.selectObject(floor.id);
@@ -214,8 +260,7 @@ async function main() {
             width: 240,
             height: 100,
             rotation: 45,
-            levelId: app.activeLevelId,
-            unitId: app.activeUnitId,
+            floorId: app.activeFloorId,
           });
           app.objects.push(obj);
           app.selectObject(obj.id, { focus: false });
@@ -285,8 +330,7 @@ async function main() {
           width: 240,
           height: 100,
           rotation: 45,
-          levelId: app.activeLevelId,
-          unitId: app.activeUnitId,
+          floorId: app.activeFloorId,
         });
         app.objects.push(obj);
         app.selectObject(obj.id, { focus: false });
@@ -327,8 +371,7 @@ async function main() {
         width: 240,
         height: 100,
         rotation: 45,
-        levelId: app.activeLevelId,
-        unitId: app.activeUnitId,
+          floorId: app.activeFloorId,
       });
       app.objects.push(obj);
       app.selectObject(obj.id, { focus: false });
@@ -387,8 +430,7 @@ async function main() {
         width: app.m(2),
         height: app.m(2),
         name: "E2E Floor",
-        levelId: app.activeLevelId,
-        unitId: app.activeUnitId,
+          floorId: app.activeFloorId,
       });
       app.objects = app.objects.concat([placed]);
       app.selectedIds = [placed.id];
@@ -459,8 +501,7 @@ async function main() {
         width: 100,
         height: 100,
         name: "E2E Peer",
-        levelId: app.activeLevelId,
-        unitId: app.activeUnitId,
+          floorId: app.activeFloorId,
       });
       app.pushHistory();
       app.objects = app.objects.concat([b]);
