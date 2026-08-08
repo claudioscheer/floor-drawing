@@ -206,7 +206,7 @@
               :class="viewMode === 'visualize' ? 'is-active' : ''"
               :aria-selected="(viewMode === 'visualize').toString()"
               @click="setViewMode('visualize')"
-              title="3D walkthrough of the plan"
+              title="3D view of the current floor or entire project"
             >
               Visualize
             </button>
@@ -600,7 +600,27 @@
           >
             <div class="viz-hud" aria-live="polite">
               <div class="viz-hud-card">
-                <strong x-text="vizLocked ? 'Spectating' : 'Explore the plan'"></strong>
+                <div class="viz-scope" role="group" aria-label="3D visualization scope">
+                  <button
+                    type="button"
+                    :class="!visualizeAllFloors ? 'is-active' : ''"
+                    :aria-pressed="(!visualizeAllFloors).toString()"
+                    @click.stop="setVisualizeAllFloors(false)"
+                  >
+                    Current floor
+                  </button>
+                  <button
+                    type="button"
+                    :class="visualizeAllFloors ? 'is-active' : ''"
+                    :aria-pressed="visualizeAllFloors.toString()"
+                    @click.stop="setVisualizeAllFloors(true)"
+                  >
+                    Entire project
+                  </button>
+                </div>
+                <strong
+                  x-text="vizLocked ? 'Spectating' : (visualizeAllFloors ? 'Explore the complete building' : 'Explore the current floor')"
+                ></strong>
                 <span x-show="!vizLocked">Click the view to look around · WASD fly · Space rise · C descend · Shift boost · Esc unlock</span>
                 <span x-show="vizLocked">WASD fly through walls · Space rise · C descend · mouse look · Shift boost · Esc release cursor</span>
               </div>

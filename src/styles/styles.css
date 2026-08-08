@@ -2686,6 +2686,39 @@ button {
   color: rgba(242, 244, 248, 0.82);
 }
 
+.viz-scope {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  margin-bottom: 5px;
+  padding: 2px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+.viz-scope button {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(242, 244, 248, 0.72);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.viz-scope button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.viz-scope button.is-active {
+  color: #fff;
+  background: var(--accent);
+}
+
 .app-body.is-visualize .canvas-shell {
   background: #1a2030;
 }

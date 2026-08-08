@@ -110,6 +110,8 @@ export function floorPlanApp(): FloorPlanApp {
 
     /** layout = 2D editor; visualize = Three.js walkthrough */
     viewMode: "layout",
+    /** Render the complete stacked project in 3D instead of only the active floor. */
+    visualizeAllFloors: false,
     vizLocked: false,
     _visualizer: null,
 
@@ -716,7 +718,7 @@ export function floorPlanApp(): FloorPlanApp {
       this.clearSelection();
       this.framePlanAfterShow();
       if (this.viewMode === "visualize" && this._visualizer) {
-        this._visualizer.rebuild(this.visibleObjects());
+        this.rebuildVisualizer();
       }
     },
 
@@ -869,6 +871,28 @@ export function floorPlanApp(): FloorPlanApp {
       }
     },
 
+    /**
+     * Switch the 3D scene between the active floor and the complete project.
+     * @param enabled - Render all floors when true
+     */
+    setVisualizeAllFloors(enabled) {
+      const next = !!enabled;
+      if (next === this.visualizeAllFloors) return;
+      this.visualizeAllFloors = next;
+      if (this.viewMode === "visualize" && this._visualizer) {
+        this.rebuildVisualizer();
+      }
+    },
+
+    /** Rebuild the 3D scene using the selected visualization scope. */
+    rebuildVisualizer() {
+      if (!this._visualizer) return;
+      this._visualizer.rebuild(this.objects, this.floors, {
+        activeFloorId: this.activeFloorId,
+        allFloors: this.visualizeAllFloors,
+      });
+    },
+
     /** Lazy-load Three.js visualizer on first enter (keeps layout bundle small). */
     async startVisualizer() {
       const mount = this.$refs.vizMount;
@@ -881,7 +905,7 @@ export function floorPlanApp(): FloorPlanApp {
           },
         });
       }
-      this._visualizer.rebuild(this.visibleObjects());
+      this.rebuildVisualizer();
       this._visualizer.start();
       this.vizLocked = this._visualizer.isLocked();
     },

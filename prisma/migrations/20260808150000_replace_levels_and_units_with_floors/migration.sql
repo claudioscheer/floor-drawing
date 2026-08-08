@@ -19,12 +19,26 @@ SET "document" =
           ORDER BY ordinal
         )
         FROM jsonb_array_elements(
-          COALESCE("document" -> 'floors', "document" -> 'levels', '[]'::jsonb)
+          CASE
+            WHEN jsonb_typeof("document" -> 'floors') = 'array'
+              THEN "document" -> 'floors'
+            WHEN jsonb_typeof("document" -> 'levels') = 'array'
+              THEN "document" -> 'levels'
+            ELSE '[]'::jsonb
+          END
         ) WITH ORDINALITY AS stored_floor(floor, ordinal)
+        WHERE jsonb_typeof(floor) = 'object'
       ),
       jsonb_build_array(jsonb_build_object('id', 'floor-1', 'name', 'Ground', 'order', 0))
     ),
-    'floorSeq', COALESCE("document" -> 'floorSeq', "document" -> 'levelSeq', '1'::jsonb),
+    'floorSeq',
+    CASE
+      WHEN jsonb_typeof("document" -> 'floorSeq') = 'number'
+        THEN "document" -> 'floorSeq'
+      WHEN jsonb_typeof("document" -> 'levelSeq') = 'number'
+        THEN "document" -> 'levelSeq'
+      ELSE '1'::jsonb
+    END,
     'objects',
     COALESCE(
       (
@@ -40,8 +54,15 @@ SET "document" =
           )
           ORDER BY ordinal
         )
-        FROM jsonb_array_elements(COALESCE("document" -> 'objects', '[]'::jsonb))
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof("document" -> 'objects') = 'array'
+              THEN "document" -> 'objects'
+            ELSE '[]'::jsonb
+          END
+        )
           WITH ORDINALITY AS stored_object(object, ordinal)
+        WHERE jsonb_typeof(object) = 'object'
       ),
       '[]'::jsonb
     )

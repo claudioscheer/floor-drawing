@@ -4,13 +4,14 @@
 
 import * as THREE from "three";
 import { worldAABB } from "@fp/geometry";
-import type { PlanObject } from "@fp/types";
+import type { Floor, PlanObject } from "@fp/types";
 import { PX_PER_METER } from "@fp/units";
 import type { SolidAABB } from "./collision";
 import {
   DOOR_HEIGHT_M,
   FLOOR_THICK_M,
   LAYER_TOP_M,
+  STOREY_HEIGHT_M,
   WALL_HEIGHT_M,
   WINDOW_HEIGHT_M,
   WINDOW_SILL_M,
@@ -21,8 +22,16 @@ import { buildWallSegments, type OpeningCut } from "./wall-openings";
 export interface BuiltScene {
   root: THREE.Group;
   solids: SolidAABB[];
-  spawn: { x: number; z: number; yaw: number };
+  spawn: { x: number; y?: number; z: number; yaw: number; pitch?: number };
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+/** Options for building either one floor or the complete stacked project. */
+export interface BuildFloorsOptions {
+  /** Active floor used by current-floor mode. */
+  activeFloorId: string | null;
+  /** Render every floor when true; otherwise render only the active floor. */
+  allFloors: boolean;
 }
 
 function pxToM(px: number): number {
@@ -198,6 +207,19 @@ export function buildSceneFromPlan(objects: readonly PlanObject[]): BuiltScene {
     maxZ = Math.max(maxZ, z1);
   };
 
+  // Bounds must include every visible kind, including rotated walls,
+  // furniture-only plans, doors, and windows.
+  for (const object of objects) {
+    if (object.visible === false) continue;
+    const bounds = worldAABB(object);
+    expand(
+      pxToM(bounds.x),
+      pxToM(bounds.x + bounds.width),
+      pxToM(bounds.y),
+      pxToM(bounds.y + bounds.height)
+    );
+  }
+
   const wallMat = mat(0xf2f0ea, { rough: 0.92 });
 
   // Terrain / large ground first (lowest walkable layer)
@@ -216,12 +238,6 @@ export function buildSceneFromPlan(objects: readonly PlanObject[]): BuiltScene {
       mesh.receiveShadow = false;
       mesh.castShadow = false;
       root.add(mesh);
-      expand(
-        pxToM(obj.x),
-        pxToM(obj.x + obj.width),
-        pxToM(obj.y),
-        pxToM(obj.y + obj.height)
-      );
     }
   }
 
@@ -284,13 +300,6 @@ export function buildSceneFromPlan(objects: readonly PlanObject[]): BuiltScene {
       line.receiveShadow = false;
       root.add(line);
     }
-
-    expand(
-      pxToM(obj.x),
-      pxToM(obj.x + obj.width),
-      pxToM(obj.y),
-      pxToM(obj.y + obj.height)
-    );
   }
 
   // Walls with openings
@@ -355,6 +364,84 @@ export function buildSceneFromPlan(objects: readonly PlanObject[]): BuiltScene {
       maxX: Number.isFinite(maxX) ? maxX : 10,
       minZ: Number.isFinite(minZ) ? minZ : 0,
       maxZ: Number.isFinite(maxZ) ? maxZ : 10,
+    },
+  };
+}
+
+/**
+ * Build a 3D scene for the active floor or the complete vertically stacked project.
+ * @param objects - All project objects
+ * @param floors - Building floors in arbitrary input order
+ * @param options - Active-floor id and rendering scope
+ * @returns Combined Three.js scene, bounds, collision data, and camera spawn
+ */
+export function buildSceneFromFloors(
+  objects: readonly PlanObject[],
+  floors: readonly Floor[],
+  options: BuildFloorsOptions
+): BuiltScene {
+  const orderedFloors = floors.slice().sort((a, b) => a.order - b.order);
+  if (!orderedFloors.length) return buildSceneFromPlan(objects);
+
+  const activeFloor =
+    orderedFloors.find((floor) => floor.id === options.activeFloorId) ||
+    orderedFloors[0] ||
+    null;
+
+  if (!options.allFloors) {
+    const activeObjects = activeFloor
+      ? objects.filter((object) => object.floorId === activeFloor.id)
+      : objects;
+    return buildSceneFromPlan(activeObjects);
+  }
+
+  const root = new THREE.Group();
+  root.name = "project-root";
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+
+  const floorIds = new Set(orderedFloors.map((floor) => floor.id));
+  orderedFloors.forEach((floor, index) => {
+    const floorObjects = objects.filter(
+      (object) =>
+        object.floorId === floor.id ||
+        (index === 0 && !floorIds.has(object.floorId))
+    );
+    const built = buildSceneFromPlan(floorObjects);
+    built.root.name = `floor:${floor.id}`;
+    built.root.position.y = index * STOREY_HEIGHT_M;
+    root.add(built.root);
+    if (floorObjects.some((object) => object.visible !== false)) {
+      minX = Math.min(minX, built.bounds.minX);
+      maxX = Math.max(maxX, built.bounds.maxX);
+      minZ = Math.min(minZ, built.bounds.minZ);
+      maxZ = Math.max(maxZ, built.bounds.maxZ);
+    }
+  });
+
+  const bounds = {
+    minX: Number.isFinite(minX) ? minX : 0,
+    maxX: Number.isFinite(maxX) ? maxX : 10,
+    minZ: Number.isFinite(minZ) ? minZ : 0,
+    maxZ: Number.isFinite(maxZ) ? maxZ : 10,
+  };
+  const span = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ, 10);
+  const topY = Math.max(0, orderedFloors.length - 1) * STOREY_HEIGHT_M + WALL_HEIGHT_M;
+
+  return {
+    root,
+    // Project overview is free-flight. XZ-only collision boxes cannot express
+    // which elevated floor they belong to, so they must not be flattened here.
+    solids: [],
+    bounds,
+    spawn: {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: topY + Math.max(4, span * 0.3),
+      z: bounds.maxZ + Math.max(8, span * 0.75),
+      yaw: 0,
+      pitch: -0.32,
     },
   };
 }

@@ -558,6 +558,39 @@ async function main() {
       else fail(results, "feature:" + k, "expected true");
     }
 
+    // --- 3D scope: current floor or complete stacked project ---
+    await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      app?.setViewMode("visualize");
+    });
+    await page.waitForFunction(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      return !!(app?._visualizer && document.querySelector(".viz-canvas"));
+    });
+    await page.locator(".viz-scope button", { hasText: "Entire project" }).click();
+    const projectViz = await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      return {
+        ok:
+          !!app?.visualizeAllFloors &&
+          document.querySelectorAll(".viz-scope button").length === 2 &&
+          !!document.querySelector(".viz-canvas"),
+        allFloors: app?.visualizeAllFloors,
+        floorCount: app?.floors?.length || 0,
+      };
+    });
+    if (!projectViz.ok) fail(results, "visualize-entire-project", JSON.stringify(projectViz));
+    else pass(results, "visualize-entire-project", projectViz);
+    await page.evaluate(() => {
+      const root = document.querySelector("#app");
+      const app = root && window.Alpine ? window.Alpine.$data(root) : null;
+      app?.setViewMode("layout");
+    });
+    await page.waitForTimeout(80);
+
     await page.screenshot({ path: path.join(OUT_DIR, "ui-after-smoke.png") });
 
     // console / page errors (API may be down during pure UI smoke)

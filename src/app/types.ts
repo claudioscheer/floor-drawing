@@ -66,6 +66,8 @@ export interface FloorPlanApp extends AlpineMagic {
   activeTool: EditorTool;
   /** layout = 2D editor; visualize = Three.js walkthrough */
   viewMode: ViewMode;
+  /** Render every floor in one stacked 3D scene. */
+  visualizeAllFloors: boolean;
   /** Pointer-lock active inside visualizer */
   vizLocked: boolean;
   _visualizer: VisualizerHandle | null;
@@ -204,6 +206,8 @@ export interface FloorPlanApp extends AlpineMagic {
   floorAreaLabel(): string;
   setTool(tool: EditorTool | string): void;
   setViewMode(mode: ViewMode | string): void;
+  setVisualizeAllFloors(enabled: boolean): void;
+  rebuildVisualizer(): void;
   startVisualizer(): Promise<void>;
   stopVisualizer(): void;
   exportPlan(): void;
